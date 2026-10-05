@@ -1,0 +1,15 @@
+# large or separately licensed data
+data/raw/
+data/processed/
+*.tif
+*.tiff
+*.zip
+*.gpkg
+*.pbf
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
