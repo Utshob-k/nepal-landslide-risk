@@ -13,3 +13,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ipynb_checkpoints/
+
+# local tool config
+CLAUDE.md
