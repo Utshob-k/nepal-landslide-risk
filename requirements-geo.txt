@@ -3,5 +3,6 @@ rasterio
 geopandas
 pyproj
 shapely
+osmium
 matplotlib
 folium
