@@ -3,7 +3,7 @@
     NEPAL_RAW_DIR=<dir holding the .pbf, if not data/raw> .venv312/Scripts/python -m src.build_feature_table
 
 Rows: the catalogue presences, plus two absence sets drawn with the same count:
-  uniform        every valid cell equally likely (what the DEM-only table used; same seed, same draw)
+  uniform        every valid cell equally likely
   road_weighted  drawn with the presences' own road-distance profile (src.roads.presence_matched_weights)
 `abs_set` says which. Run both through the models and compare: the gap is
 how much of a score is road access (reporting bias) rather than terrain.
@@ -26,7 +26,7 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from shapely import contains_xy
 
-from .build_dem_table import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
+from .grid import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
 from .roads import BIN_EDGES_KM, distance_to_roads, extract_motor_roads, presence_matched_weights
 from .sampling import sample_background
 
@@ -39,7 +39,7 @@ def bin_shares(dist_m: np.ndarray) -> list[float]:
 
 
 def main() -> None:
-    cutoff, ratio, seed = 5.0, 5, 0  # same as the DEM-only table
+    cutoff, ratio, seed = 5.0, 5, 0  # accuracy cutoff in km, absences per presence, rng seed
 
     if not ROADS_GPKG.exists():
         pbf = Path(os.environ.get("NEPAL_RAW_DIR", RAW)) / "nepal-latest.osm.pbf"
@@ -63,7 +63,7 @@ def main() -> None:
     ct = from_origin(xmin, ymax, COARSE, COARSE)
     valid = rasterize([(nepal_geom, 1)], out_shape=cshape, transform=ct, dtype="uint8").astype(bool)
     exclude = np.zeros(cshape, dtype=bool)
-    for x, y in zip(pres["x"], pres["y"]):
+    for x, y in zip(pres["x"], pres["y"], strict=True):
         r, c = int((ymax - y) / COARSE), int((x - xmin) / COARSE)
         if 0 <= r < cshape[0] and 0 <= c < cshape[1]:
             exclude[r, c] = True
@@ -124,7 +124,8 @@ def main() -> None:
         "rows_written": int(len(table)), "rows_dropped_nan_or_dupes": int(n_before - len(table)),
         "counts_by_set": table["abs_set"].value_counts().to_dict(),
         "caveats": "weights match only the road-distance marginal; presence locations are 5 km or worse so their "
-                   "road distances are noisy; weights use the presences' own distances (mild label information, set once before CV)",
+                   "road distances are noisy; weights use the presences' own distances "
+                   "(mild label information, set once before CV)",
         "osm": "(c) OpenStreetMap contributors, ODbL; Geofabrik Nepal extract, md5 d098ee3d64113fbc596a99fb6cf55232",
     }
     (OUT / "features_roads.meta.json").write_text(json.dumps(meta, indent=2))

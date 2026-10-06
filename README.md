@@ -145,7 +145,6 @@ pytest
 
 # Build the tables and run the baselines (raw data in data/raw, see data/README.md).
 # If the OSM .pbf lives elsewhere, point NEPAL_RAW_DIR at its folder.
-python -m src.build_dem_table        # DEM-only table (terrain, uniform absences)
 python -m src.build_feature_table    # terrain + road distance, two absence sets
 python -m src.run_baselines          # writes results/baselines_roads.csv
 ```
@@ -158,7 +157,7 @@ src/sampling.py   background (absence) points, optionally bias-weighted
 src/cv.py         spatial block k-fold with an optional buffer, plus random k-fold
 src/modeling.py   random-vs-spatial CV comparison for any sklearn model
 src/roads.py      motor roads from OSM, distance to road, presence-matched absence weights
-src/build_dem_table.py      DEM-only feature table (shared grid and terrain helpers)
+src/grid.py       shared 30 m UTM grid, DEM warping, terrain features at points
 src/build_feature_table.py  terrain + road distance, uniform and road-weighted absences
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
 tests/            synthetic-data tests, including the leakage demonstration
