@@ -90,10 +90,9 @@ Reading the tables:
   uniform absences it alone scores 0.58, so it looks like a weak access proxy
   and not terrain skill.
 - The random-vs-spatial gap is close to zero everywhere (-0.02 to +0.04), where
-  the synthetic benchmark in `tests/` shows about 0.3. My guess is that the
-  features are smooth terrain values with no coordinates, and the catalogue
-  locations are only good to 5 km or worse, so presences don't cluster at the
-  30 m scale the features see. I haven't tested that.
+  the synthetic benchmark in `tests/` shows about 0.3. I checked that the CV
+  code can see a gap at all by giving the model the coordinates (see the leakage
+  check below); it can, so the small terrain gap is a result and not a bug.
 - Some of the uniform-absence skill was road access and not terrain: the random
   forest drops from 0.77 to about 0.70 once absences are no longer easy to find
   in remote terrain.
@@ -117,6 +116,34 @@ Spatial-CV AUROC, mean ± sd across draws:
   distance still adds nothing with matched absences (0.704 either way) and
   still adds about 0.04 with uniform ones.
 - The gap stays near zero in every draw (-0.03 to +0.05).
+
+Leakage check (`src/leakage_check.py`, `results/leakage_check.csv`): the same
+random forest, headline setting, 5 fold seeds, with and without coordinates.
+Spatial-CV AUROC, and in brackets the gap to random CV:
+
+| Features | Matched absences | Uniform absences |
+|---|---|---|
+| Terrain | 0.721 (0.010) | 0.767 (0.003) |
+| Terrain + x, y | 0.737 (0.031) | 0.778 (0.048) |
+| x, y only | 0.699 (0.056) | 0.686 (0.126) |
+
+- With coordinates the gap opens up (0.03 to 0.13), so the CV code does detect
+  leakage on this data. Terrain alone gives almost nothing to leak, probably
+  because 30 m terrain values at points located to 5 km or worse don't
+  identify a place. That is my reading; I haven't proved it.
+- Coordinates alone score 0.70 under spatial CV, about the same as the terrain
+  model, so regional pattern carries as much signal as terrain at 50 km blocks.
+  Larger blocks separate the two:
+
+| Block size | x, y only (matched) | Terrain (matched) | x, y only (uniform) | Terrain (uniform) |
+|---|---|---|---|---|
+| 50 km | 0.699 | 0.721 | 0.686 | 0.767 |
+| 100 km | 0.680 | 0.721 | 0.663 | 0.770 |
+| 200 km | 0.502 | 0.717 | 0.506 | 0.755 |
+
+  At 200 km blocks coordinates drop to chance while terrain barely moves, so
+  the terrain skill isn't just regional location. At 200 km only 4.4 to 4.6 of
+  5 folds had both classes to score, so treat that row as rough.
 
 ## Limitations
 
@@ -189,6 +216,7 @@ python -m src.build_feature_table    # terrain + road and river distance, two ab
 python -m src.run_baselines          # writes results/baselines_roads.csv
 python -m src.build_feature_table --draws 20   # 20 absence draws per scheme
 python -m src.absence_variation      # writes results/absence_variation.csv
+python -m src.leakage_check          # writes results/leakage_check.csv
 ```
 
 ## Repository layout
@@ -203,5 +231,6 @@ src/grid.py       shared 30 m UTM grid, DEM warping, terrain features at points
 src/build_feature_table.py  terrain + road and river distance, uniform and road-weighted absences
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
 src/absence_variation.py    score repeated absence draws at the headline setting
+src/leakage_check.py        does the CV show a gap when the model gets coordinates?
 tests/            synthetic-data tests, including the leakage demonstration
 ```
