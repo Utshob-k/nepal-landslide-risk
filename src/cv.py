@@ -7,7 +7,7 @@ dropping training points near the test blocks) gives the honest number.
 """
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import numpy as np
 from scipy.spatial import cKDTree

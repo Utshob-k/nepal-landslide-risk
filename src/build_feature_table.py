@@ -1,9 +1,9 @@
-"""Feature table with terrain + road distance, and two absence sets.
+"""Feature table with terrain + road distance + river distance, and two absence sets.
 
     NEPAL_RAW_DIR=<dir holding the .pbf, if not data/raw> .venv312/Scripts/python -m src.build_feature_table
 
 Rows: the catalogue presences, plus two absence sets drawn with the same count:
-  uniform        every valid cell equally likely (what the DEM-only table used; same seed, same draw)
+  uniform        every valid cell equally likely
   road_weighted  drawn with the presences' own road-distance profile (src.roads.presence_matched_weights)
 `abs_set` says which. Run both through the models and compare: the gap is
 how much of a score is road access (reporting bias) rather than terrain.
@@ -26,11 +26,12 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from shapely import contains_xy
 
-from .build_dem_table import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
-from .roads import BIN_EDGES_KM, distance_to_roads, extract_motor_roads, presence_matched_weights
+from .grid import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
+from .roads import BIN_EDGES_KM, distance_to_lines, extract_motor_roads, extract_rivers, presence_matched_weights
 from .sampling import sample_background
 
 ROADS_GPKG = RAW.parent / "processed" / "roads_motor.gpkg"
+RIVERS_GPKG = RAW.parent / "processed" / "rivers.gpkg"
 
 
 def bin_shares(dist_m: np.ndarray) -> list[float]:
@@ -39,13 +40,19 @@ def bin_shares(dist_m: np.ndarray) -> list[float]:
 
 
 def main() -> None:
-    cutoff, ratio, seed = 5.0, 5, 0  # same as the DEM-only table
+    cutoff, ratio, seed = 5.0, 5, 0  # accuracy cutoff in km, absences per presence, rng seed
 
     if not ROADS_GPKG.exists():
         pbf = Path(os.environ.get("NEPAL_RAW_DIR", RAW)) / "nepal-latest.osm.pbf"
         print("extracting roads from", pbf)
         extract_motor_roads(pbf, ROADS_GPKG, CRS)
     lines = gpd.read_file(ROADS_GPKG).geometry.values
+
+    if not RIVERS_GPKG.exists():
+        pbf = Path(os.environ.get("NEPAL_RAW_DIR", RAW)) / "nepal-latest.osm.pbf"
+        print("extracting rivers from", pbf)
+        extract_rivers(pbf, RIVERS_GPKG, CRS)
+    rivers = gpd.read_file(RIVERS_GPKG).geometry.values
 
     tiles = sorted((RAW / "dem_glo30").glob("*.tif"))
     if len(tiles) != 45:
@@ -63,15 +70,15 @@ def main() -> None:
     ct = from_origin(xmin, ymax, COARSE, COARSE)
     valid = rasterize([(nepal_geom, 1)], out_shape=cshape, transform=ct, dtype="uint8").astype(bool)
     exclude = np.zeros(cshape, dtype=bool)
-    for x, y in zip(pres["x"], pres["y"]):
+    for x, y in zip(pres["x"], pres["y"], strict=True):
         r, c = int((ymax - y) / COARSE), int((x - xmin) / COARSE)
         if 0 <= r < cshape[0] and 0 <= c < cshape[1]:
             exclude[r, c] = True
 
     # absence weights from exact distances at every valid coarse cell
     vr, vc = np.nonzero(valid)
-    bg_dist = distance_to_roads(xmin + (vc + 0.5) * COARSE, ymax - (vr + 0.5) * COARSE, lines)
-    pres_dist = distance_to_roads(near["x"].to_numpy(), near["y"].to_numpy(), lines)
+    bg_dist = distance_to_lines(xmin + (vc + 0.5) * COARSE, ymax - (vr + 0.5) * COARSE, lines)
+    pres_dist = distance_to_lines(near["x"].to_numpy(), near["y"].to_numpy(), lines)
     weights = np.zeros(cshape)
     weights[vr, vc] = presence_matched_weights(bg_dist, pres_dist)
 
@@ -93,7 +100,8 @@ def main() -> None:
     table["row"] = ((ymax - table["y"]) / CELL).astype(int)
     table["col"] = ((table["x"] - xmin) / CELL).astype(int)
     table = pd.concat([table, terrain_at(dem, table["row"].to_numpy(), table["col"].to_numpy())], axis=1)
-    table["road_dist_km"] = distance_to_roads(table["x"].to_numpy(), table["y"].to_numpy(), lines) / 1000.0
+    table["road_dist_km"] = distance_to_lines(table["x"].to_numpy(), table["y"].to_numpy(), lines) / 1000.0
+    table["river_dist_km"] = distance_to_lines(table["x"].to_numpy(), table["y"].to_numpy(), rivers) / 1000.0
 
     n_before = len(table)
     table = table.dropna(subset=["elevation", "slope", "curvature"])
@@ -101,7 +109,7 @@ def main() -> None:
     table["inside_nepal"] = contains_xy(nepal_geom, table["x"].to_numpy(), table["y"].to_numpy())
 
     cols = ["label", "abs_set", "event_id", "event_date", "accuracy_km", "longitude", "latitude", "x", "y",
-            "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "inside_nepal"]
+            "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "river_dist_km", "inside_nepal"]
     OUT.mkdir(parents=True, exist_ok=True)
     table[cols].to_csv(OUT / "features_roads.csv", index=False)
 
@@ -112,6 +120,10 @@ def main() -> None:
         "road_definition": "OSM highway in motorway/trunk/primary/secondary/tertiary/unclassified/residential (+_link); "
                            "no track/path/footway/steps/service",
         "motor_ways": int(len(lines)),
+        "river_definition": "OSM waterway=river only (no stream, canal, ditch or drain)",
+        "river_ways": int(len(rivers)),
+        "median_river_dist_km": {k: round(float(table[table.abs_set == k]["river_dist_km"].median()), 2)
+                                 for k in ("presence", "uniform", "road_weighted")},
         "road_distance_bins_km": BIN_EDGES_KM.tolist()[:-1] + ["inf"],
         "share_by_distance_bin": {
             "background_valid_cells": bin_shares(bg_dist),
@@ -124,7 +136,8 @@ def main() -> None:
         "rows_written": int(len(table)), "rows_dropped_nan_or_dupes": int(n_before - len(table)),
         "counts_by_set": table["abs_set"].value_counts().to_dict(),
         "caveats": "weights match only the road-distance marginal; presence locations are 5 km or worse so their "
-                   "road distances are noisy; weights use the presences' own distances (mild label information, set once before CV)",
+                   "road distances are noisy; weights use the presences' own distances "
+                   "(mild label information, set once before CV)",
         "osm": "(c) OpenStreetMap contributors, ODbL; Geofabrik Nepal extract, md5 d098ee3d64113fbc596a99fb6cf55232",
     }
     (OUT / "features_roads.meta.json").write_text(json.dumps(meta, indent=2))

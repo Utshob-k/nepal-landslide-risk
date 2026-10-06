@@ -5,7 +5,7 @@ much of a naive score is just spatial autocorrelation.
 """
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 from sklearn.base import BaseEstimator
