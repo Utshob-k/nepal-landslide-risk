@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 
-from src.cv import block_ids, random_kfold, spatial_block_kfold
+from src.cv import block_ids, spatial_block_kfold
 from src.modeling import compare_cv
 from src.sampling import sample_background
 from src.terrain import aspect_degrees, slope_degrees
@@ -39,7 +39,7 @@ def test_background_respects_mask_exclusions_and_uniqueness():
     exclude = np.zeros_like(mask)
     exclude[20:30, 20:30] = True
     rows, cols = sample_background(mask, 200, rng, exclude=exclude)
-    assert len(set(zip(rows, cols))) == 200
+    assert len(set(zip(rows, cols, strict=True))) == 200
     assert mask[rows, cols].all()
     assert not exclude[rows, cols].any()
 

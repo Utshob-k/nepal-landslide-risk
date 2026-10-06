@@ -51,24 +51,33 @@ def test_weights_do_not_blow_up_when_background_misses_a_presence_bin():
 
 # ---- distance to roads -----------------------------------------------------
 
-def test_distance_to_roads_is_exact_and_chunk_independent():
+def test_distance_to_lines_is_exact_and_chunk_independent():
     shapely = pytest.importorskip("shapely")
-    from src.roads import distance_to_roads
+    from src.roads import distance_to_lines
 
     lines = [shapely.LineString([(0, 0), (1000, 0)]), shapely.LineString([(0, 5000), (1000, 5000)])]
     x = np.array([500.0, -400.0, 500.0, 1300.0, 500.0])
     y = np.array([300.0, 0.0, 4000.0, 400.0, 2400.0])
     want = np.array([300.0, 400.0, 1000.0, 500.0, 2400.0])
-    assert distance_to_roads(x, y, lines) == pytest.approx(want)
-    assert distance_to_roads(x, y, lines, chunk=2) == pytest.approx(want)
+    assert distance_to_lines(x, y, lines) == pytest.approx(want)
+    assert distance_to_lines(x, y, lines, chunk=2) == pytest.approx(want)
+
+
+def test_old_name_still_works_and_rivers_are_a_separate_definition():
+    pytest.importorskip("shapely")
+    from src import roads
+
+    assert roads.distance_to_roads is roads.distance_to_lines
+    assert {"river"} == roads.RIVERS
+    assert not (roads.RIVERS & roads.MOTOR)
 
 
 def test_a_point_on_a_road_is_zero_metres_away():
     shapely = pytest.importorskip("shapely")
-    from src.roads import distance_to_roads
+    from src.roads import distance_to_lines
 
     line = [shapely.LineString([(0, 0), (1000, 1000)])]
-    assert distance_to_roads(np.array([500.0]), np.array([500.0]), line)[0] == pytest.approx(0.0)
+    assert distance_to_lines(np.array([500.0]), np.array([500.0]), line)[0] == pytest.approx(0.0)
 
 
 # ---- table builders --------------------------------------------------------
@@ -76,7 +85,7 @@ def test_a_point_on_a_road_is_zero_metres_away():
 def test_terrain_at_reads_slope_aspect_and_curvature_from_a_patch():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import CELL, terrain_at
+    from src.grid import CELL, terrain_at
 
     dem = np.tile(np.arange(30) * CELL, (30, 1)).astype("float32")  # rises 45 degrees eastward
     t = terrain_at(dem, np.array([15]), np.array([10]))
@@ -90,7 +99,7 @@ def test_terrain_at_reads_slope_aspect_and_curvature_from_a_patch():
 def test_terrain_at_returns_nan_at_the_edge_and_next_to_missing_data():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import terrain_at
+    from src.grid import terrain_at
 
     dem = np.random.default_rng(0).uniform(100, 200, (30, 30)).astype("float32")
     dem[15, 15] = np.nan
@@ -101,7 +110,7 @@ def test_terrain_at_returns_nan_at_the_edge_and_next_to_missing_data():
 def test_flat_cell_gets_zero_aspect_not_nan():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import terrain_at
+    from src.grid import terrain_at
 
     t = terrain_at(np.full((20, 20), 500.0, dtype="float32"), np.array([10]), np.array([10]))
     assert t.slope[0] == 0 and t.aspect_sin[0] == 0 and t.aspect_cos[0] == 0
@@ -111,7 +120,7 @@ def test_load_presences_keeps_nepal_and_maps_accuracy(tmp_path):
     pd = pytest.importorskip("pandas")
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import load_presences
+    from src.grid import load_presences
 
     csv = tmp_path / "glc.csv"
     pd.DataFrame({
