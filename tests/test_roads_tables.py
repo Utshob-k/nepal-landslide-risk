@@ -76,7 +76,7 @@ def test_a_point_on_a_road_is_zero_metres_away():
 def test_terrain_at_reads_slope_aspect_and_curvature_from_a_patch():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import CELL, terrain_at
+    from src.grid import CELL, terrain_at
 
     dem = np.tile(np.arange(30) * CELL, (30, 1)).astype("float32")  # rises 45 degrees eastward
     t = terrain_at(dem, np.array([15]), np.array([10]))
@@ -90,7 +90,7 @@ def test_terrain_at_reads_slope_aspect_and_curvature_from_a_patch():
 def test_terrain_at_returns_nan_at_the_edge_and_next_to_missing_data():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import terrain_at
+    from src.grid import terrain_at
 
     dem = np.random.default_rng(0).uniform(100, 200, (30, 30)).astype("float32")
     dem[15, 15] = np.nan
@@ -101,7 +101,7 @@ def test_terrain_at_returns_nan_at_the_edge_and_next_to_missing_data():
 def test_flat_cell_gets_zero_aspect_not_nan():
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import terrain_at
+    from src.grid import terrain_at
 
     t = terrain_at(np.full((20, 20), 500.0, dtype="float32"), np.array([10]), np.array([10]))
     assert t.slope[0] == 0 and t.aspect_sin[0] == 0 and t.aspect_cos[0] == 0
@@ -111,7 +111,7 @@ def test_load_presences_keeps_nepal_and_maps_accuracy(tmp_path):
     pd = pytest.importorskip("pandas")
     pytest.importorskip("rasterio")
     pytest.importorskip("geopandas")
-    from src.build_dem_table import load_presences
+    from src.grid import load_presences
 
     csv = tmp_path / "glc.csv"
     pd.DataFrame({
