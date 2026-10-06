@@ -1,13 +1,15 @@
-"""Motor roads from an OSM extract, distance to the nearest road, and absence weights.
+"""Roads and rivers from an OSM extract, distance to the nearest line, and absence weights.
 
 Reports of landslides cluster near roads, so uniformly drawn absences teach a
 model "far from a road = no landslide". `presence_matched_weights` draws
 absences with the presences' own road-distance profile instead, which removes
 road distance as a shortcut. The sampling itself stays in `src/sampling.py`.
 
-Which ways count as roads is a choice, made here and nowhere else: motor
-roads only. Footpaths, tracks, steps and cycleways are excluded because in
-Nepal they are numerous and say little about where a report can come from.
+Which ways count is a choice, made here and nowhere else. Roads: motor roads
+only; footpaths, tracks, steps and cycleways are excluded because in Nepal they
+are numerous and say little about where a report can come from. Rivers:
+waterway=river only. Streams are left out because how well they are mapped
+probably follows mapping effort, and canals, ditches and drains are man-made.
 
 Reading the .pbf needs `osmium` (pyosmium); extract once, then reuse the gpkg.
 """
@@ -21,24 +23,25 @@ MOTOR = {
     "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential",
     "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",
 }
+RIVERS = {"river"}
 # Distance bins in km for matching presences to background (last bin is open-ended).
 BIN_EDGES_KM = np.array([0, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, np.inf])
 
 
-def extract_motor_roads(pbf: Path, out_gpkg: Path, crs: str) -> int:
-    """Write motor-road LineStrings (projected to `crs`) to a GeoPackage; return the way count."""
+def _extract_ways(pbf: Path, out_gpkg: Path, crs: str, key: str, keep: set[str]) -> int:
+    """Write LineStrings of ways whose `key` tag is in `keep` (projected to `crs`) to a GeoPackage."""
     import geopandas as gpd
     import osmium
     import shapely.wkb
 
     factory = osmium.geom.WKBFactory()
     geoms, kinds = [], []
-    fp = osmium.FileProcessor(str(pbf)).with_locations().with_filter(osmium.filter.KeyFilter("highway"))
+    fp = osmium.FileProcessor(str(pbf)).with_locations().with_filter(osmium.filter.KeyFilter(key))
     for obj in fp:
         if not obj.is_way():
             continue
-        kind = obj.tags.get("highway")
-        if kind not in MOTOR:
+        kind = obj.tags.get(key)
+        if kind not in keep:
             continue
         try:
             wkb = factory.create_linestring(obj)
@@ -46,13 +49,23 @@ def extract_motor_roads(pbf: Path, out_gpkg: Path, crs: str) -> int:
             continue
         geoms.append(shapely.wkb.loads(wkb, hex=True))
         kinds.append(kind)
-    gdf = gpd.GeoDataFrame({"highway": kinds}, geometry=geoms, crs="EPSG:4326").to_crs(crs)
+    gdf = gpd.GeoDataFrame({key: kinds}, geometry=geoms, crs="EPSG:4326").to_crs(crs)
     out_gpkg.parent.mkdir(parents=True, exist_ok=True)
     gdf.to_file(out_gpkg, driver="GPKG")
     return len(gdf)
 
 
-def distance_to_roads(x: np.ndarray, y: np.ndarray, lines, chunk: int = 200_000) -> np.ndarray:
+def extract_motor_roads(pbf: Path, out_gpkg: Path, crs: str) -> int:
+    """Motor-road LineStrings to a GeoPackage; returns the way count."""
+    return _extract_ways(pbf, out_gpkg, crs, "highway", MOTOR)
+
+
+def extract_rivers(pbf: Path, out_gpkg: Path, crs: str) -> int:
+    """River LineStrings to a GeoPackage; returns the way count."""
+    return _extract_ways(pbf, out_gpkg, crs, "waterway", RIVERS)
+
+
+def distance_to_lines(x: np.ndarray, y: np.ndarray, lines, chunk: int = 200_000) -> np.ndarray:
     """Exact distance in metres from each (x, y) to the nearest line. x, y and lines share a metric CRS."""
     import shapely
     from shapely import STRtree
@@ -64,6 +77,9 @@ def distance_to_roads(x: np.ndarray, y: np.ndarray, lines, chunk: int = 200_000)
         _, d = tree.query_nearest(pts, return_distance=True, all_matches=False)
         out[i : i + chunk] = d
     return out
+
+
+distance_to_roads = distance_to_lines  # the first caller was roads
 
 
 def presence_matched_weights(

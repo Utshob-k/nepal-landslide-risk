@@ -36,9 +36,9 @@ terrain knowledge at all. The study measures the same gap on real data.
 ## Results
 
 Work in progress. So far the features are terrain (elevation, slope, aspect,
-a curvature proxy) and distance to the nearest motor road. Rainfall, land cover
-and rivers aren't in yet and gradient boosting hasn't been run. These numbers
-describe a partial model and are not a hazard forecast.
+a curvature proxy) and distance to the nearest motor road and to the nearest
+river. Rainfall and land cover aren't in yet and gradient boosting hasn't been
+run. These numbers describe a partial model and are not a hazard forecast.
 
 Setup, fixed before running: 5-fold spatial block CV, 50 km blocks, 10 km
 buffer, 194 presences (catalogue location accuracy 5 km or better), 975
@@ -56,6 +56,9 @@ see Limitations):
 | Random forest (terrain) | 0.72 | 0.73 | 0.01 |
 | Random forest + road distance (ablation) | 0.72 | 0.74 | 0.02 |
 | Road distance only (diagnostic) | 0.44 | 0.47 | 0.03 |
+| Random forest + river distance | 0.73 | 0.74 | 0.02 |
+| Random forest + road + river distance | 0.73 | 0.75 | 0.02 |
+| River distance only (diagnostic) | 0.49 | 0.51 | 0.02 |
 
 Absences drawn uniformly over Nepal:
 
@@ -66,6 +69,9 @@ Absences drawn uniformly over Nepal:
 | Random forest (terrain) | 0.77 | 0.77 | 0.00 |
 | Random forest + road distance (ablation) | 0.81 | 0.82 | 0.01 |
 | Road distance only (diagnostic) | 0.74 | 0.74 | 0.00 |
+| Random forest + river distance | 0.77 | 0.78 | 0.01 |
+| Random forest + road + river distance | 0.81 | 0.83 | 0.01 |
+| River distance only (diagnostic) | 0.58 | 0.59 | 0.01 |
 
 Reading the tables:
 
@@ -74,7 +80,12 @@ Reading the tables:
   matched absences it adds nothing (0.72 either way). The terrain-only random
   forest at about 0.72 is the number I'd quote; it stays between 0.69 and 0.73
   across the 12 block, buffer and cutoff settings.
-- The random-vs-spatial gap is close to zero everywhere (-0.02 to +0.03), where
+- River distance adds almost nothing. With matched absences the terrain-only
+  random forest goes from 0.721 to 0.728, which is smaller than the seed spread
+  (0.017 to 0.021), and river distance alone scores 0.49, which is chance. With
+  uniform absences it alone scores 0.58, so it looks like a weak access proxy
+  and not terrain skill.
+- The random-vs-spatial gap is close to zero everywhere (-0.02 to +0.04), where
   the synthetic benchmark in `tests/` shows about 0.3. My guess is that the
   features are smooth terrain values with no coordinates, and the catalogue
   locations are only good to 5 km or worse, so presences don't cluster at the
@@ -111,6 +122,10 @@ Reading the tables:
 - "Road" is a choice: OSM motorway through tertiary, unclassified and
   residential (plus links), about 133,000 km, mostly village lanes. Tracks,
   paths, steps and footways are left out.
+- "River" is also a choice: OSM `waterway=river` only, about 26,800 km. Streams
+  (about 66,600 km) are left out because how well they are mapped probably
+  follows mapping effort, and canals, ditches and drains are man-made. Results
+  could differ with streams included.
 - Each scheme is one absence draw. The seed spread (0.01 to 0.02) covers fold
   assignment only, not drawing different absences.
 - No water mask, so some absences may land on rivers or lakes. Absence locations
@@ -131,7 +146,7 @@ Versions used so far (downloaded 2026-10-05):
   open bucket `copernicus-dem-30m`). Licence not yet verified; attribution to
   Copernicus is expected.
 - Boundary: geoBoundaries gbOpen NPL ADM0, year 2019, CC BY 4.0.
-- Roads: Geofabrik Nepal extract (`nepal-latest.osm.pbf`, last modified
+- Roads and rivers: Geofabrik Nepal extract (`nepal-latest.osm.pbf`, last modified
   2026-10-03, md5 `d098ee3d64113fbc596a99fb6cf55232`). Contains data from
   OpenStreetMap contributors, ODbL.
 
@@ -145,7 +160,7 @@ pytest
 
 # Build the tables and run the baselines (raw data in data/raw, see data/README.md).
 # If the OSM .pbf lives elsewhere, point NEPAL_RAW_DIR at its folder.
-python -m src.build_feature_table    # terrain + road distance, two absence sets
+python -m src.build_feature_table    # terrain + road and river distance, two absence sets
 python -m src.run_baselines          # writes results/baselines_roads.csv
 ```
 
@@ -156,9 +171,9 @@ src/terrain.py    slope, aspect, curvature proxy from a DEM array
 src/sampling.py   background (absence) points, optionally bias-weighted
 src/cv.py         spatial block k-fold with an optional buffer, plus random k-fold
 src/modeling.py   random-vs-spatial CV comparison for any sklearn model
-src/roads.py      motor roads from OSM, distance to road, presence-matched absence weights
+src/roads.py      OSM roads and rivers, distance to nearest line, presence-matched absence weights
 src/grid.py       shared 30 m UTM grid, DEM warping, terrain features at points
-src/build_feature_table.py  terrain + road distance, uniform and road-weighted absences
+src/build_feature_table.py  terrain + road and river distance, uniform and road-weighted absences
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
 tests/            synthetic-data tests, including the leakage demonstration
 ```

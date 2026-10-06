@@ -51,24 +51,33 @@ def test_weights_do_not_blow_up_when_background_misses_a_presence_bin():
 
 # ---- distance to roads -----------------------------------------------------
 
-def test_distance_to_roads_is_exact_and_chunk_independent():
+def test_distance_to_lines_is_exact_and_chunk_independent():
     shapely = pytest.importorskip("shapely")
-    from src.roads import distance_to_roads
+    from src.roads import distance_to_lines
 
     lines = [shapely.LineString([(0, 0), (1000, 0)]), shapely.LineString([(0, 5000), (1000, 5000)])]
     x = np.array([500.0, -400.0, 500.0, 1300.0, 500.0])
     y = np.array([300.0, 0.0, 4000.0, 400.0, 2400.0])
     want = np.array([300.0, 400.0, 1000.0, 500.0, 2400.0])
-    assert distance_to_roads(x, y, lines) == pytest.approx(want)
-    assert distance_to_roads(x, y, lines, chunk=2) == pytest.approx(want)
+    assert distance_to_lines(x, y, lines) == pytest.approx(want)
+    assert distance_to_lines(x, y, lines, chunk=2) == pytest.approx(want)
+
+
+def test_old_name_still_works_and_rivers_are_a_separate_definition():
+    pytest.importorskip("shapely")
+    from src import roads
+
+    assert roads.distance_to_roads is roads.distance_to_lines
+    assert {"river"} == roads.RIVERS
+    assert not (roads.RIVERS & roads.MOTOR)
 
 
 def test_a_point_on_a_road_is_zero_metres_away():
     shapely = pytest.importorskip("shapely")
-    from src.roads import distance_to_roads
+    from src.roads import distance_to_lines
 
     line = [shapely.LineString([(0, 0), (1000, 1000)])]
-    assert distance_to_roads(np.array([500.0]), np.array([500.0]), line)[0] == pytest.approx(0.0)
+    assert distance_to_lines(np.array([500.0]), np.array([500.0]), line)[0] == pytest.approx(0.0)
 
 
 # ---- table builders --------------------------------------------------------

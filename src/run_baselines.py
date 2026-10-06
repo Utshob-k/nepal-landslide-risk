@@ -4,8 +4,8 @@
 
 Headline setting is fixed in advance: 50 km blocks, 10 km buffer, presences
 with location accuracy <= 5 km. Every other setting is reported as sensitivity.
-Table: data/tables/features_roads.csv (src/build_feature_table.py). Still PARTIAL: terrain and
-road distance only. Two absence sets: `uniform` and `road_weighted`; comparing them shows how much
+Table: data/tables/features_roads.csv (src/build_feature_table.py). Still PARTIAL: terrain,
+road distance and river distance only. Two absence sets: `uniform` and `road_weighted`; comparing them shows how much
 of a score is road access. CPU only.
 """
 from __future__ import annotations
@@ -42,6 +42,9 @@ MODELS = {
     "Random forest": (TERRAIN, _forest()),
     "Random forest + road distance (ablation)": (TERRAIN + ["log_road_dist"], _forest()),
     "Road distance only (logistic)": (["log_road_dist"], _logit()),
+    "Random forest + river distance": (TERRAIN + ["log_river_dist"], _forest()),
+    "River distance only (logistic)": (["log_river_dist"], _logit()),
+    "Random forest + road + river distance": (TERRAIN + ["log_road_dist", "log_river_dist"], _forest()),
 }
 
 
@@ -76,6 +79,7 @@ def run(table: pd.DataFrame, abs_set: str, cutoff: float, block_km: int, buffer_
 def main() -> None:
     table = pd.read_csv(ROOT / "data" / "tables" / "features_roads.csv")
     table["log_road_dist"] = np.log(table["road_dist_km"] + 0.01)
+    table["log_river_dist"] = np.log(table["river_dist_km"] + 0.01)
     out = []
     grid = itertools.product(["uniform", "road_weighted"], [5.0, 10.0], [25, 50, 100], [0, 10])
     for abs_set, cutoff, block_km, buffer_km in grid:
