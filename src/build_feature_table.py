@@ -12,6 +12,7 @@ Still no rainfall, land cover or river features.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -39,7 +40,7 @@ def bin_shares(dist_m: np.ndarray) -> list[float]:
     return (np.bincount(b, minlength=len(BIN_EDGES_KM) - 1) / len(b)).round(3).tolist()
 
 
-def main() -> None:
+def main(n_draws: int = 1) -> None:
     cutoff, ratio, seed = 5.0, 5, 0  # accuracy cutoff in km, absences per presence, rng seed
 
     if not ROADS_GPKG.exists():
@@ -92,11 +93,15 @@ def main() -> None:
         df["abs_set"], df["label"] = abs_set, 0
         return df
 
-    uniform = draw("uniform", np.random.default_rng(seed), None)
-    weighted = draw("road_weighted", np.random.default_rng(seed + 1), weights)
-    pres = pres.assign(abs_set="presence", label=1)
+    # draw 0 uses the original seeds, so the default table does not change
+    absences = []
+    for k in range(n_draws):
+        uniform = draw("uniform", np.random.default_rng(seed + 2 * k), None)
+        weighted = draw("road_weighted", np.random.default_rng(seed + 2 * k + 1), weights)
+        absences += [uniform.assign(draw=k), weighted.assign(draw=k)]
+    pres = pres.assign(abs_set="presence", label=1, draw=-1)
 
-    table = pd.concat([pres, uniform, weighted], ignore_index=True)
+    table = pd.concat([pres, *absences], ignore_index=True)
     table["row"] = ((ymax - table["y"]) / CELL).astype(int)
     table["col"] = ((table["x"] - xmin) / CELL).astype(int)
     table = pd.concat([table, terrain_at(dem, table["row"].to_numpy(), table["col"].to_numpy())], axis=1)
@@ -105,12 +110,16 @@ def main() -> None:
 
     n_before = len(table)
     table = table.dropna(subset=["elevation", "slope", "curvature"])
-    table = table[~table.duplicated(subset=["abs_set", "row", "col"])].copy()
+    table = table[~table.duplicated(subset=["abs_set", "draw", "row", "col"])].copy()
     table["inside_nepal"] = contains_xy(nepal_geom, table["x"].to_numpy(), table["y"].to_numpy())
 
     cols = ["label", "abs_set", "event_id", "event_date", "accuracy_km", "longitude", "latitude", "x", "y",
             "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "river_dist_km", "inside_nepal"]
     OUT.mkdir(parents=True, exist_ok=True)
+    if n_draws > 1:  # extra absence draws for src/absence_variation.py; the main table and its meta stay as they are
+        table[[*cols, "draw"]].to_csv(OUT / "features_roads_draws.csv", index=False)
+        print(f"wrote {len(table)} rows, {n_draws} draws per scheme -> features_roads_draws.csv")
+        return
     table[cols].to_csv(OUT / "features_roads.csv", index=False)
 
     near_t = table[(table.abs_set == "presence") & (table.accuracy_km <= cutoff)]
@@ -145,4 +154,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--draws", type=int, default=1,
+                        help="absence draws per scheme (more than 1 writes features_roads_draws.csv)")
+    main(parser.parse_args().draws)

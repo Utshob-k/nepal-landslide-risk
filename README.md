@@ -45,6 +45,8 @@ buffer, 194 presences (catalogue location accuracy 5 km or better), 975
 absences, averaged over 5 seeds for the fold assignment. Gap is random-CV AUROC
 minus spatial-CV AUROC. The spatial number is the one to read; the random column
 is there to show the gap. Every setting is in `results/baselines_roads.csv`.
+The tables below use one absence draw per scheme; the next section redraws the
+absences 20 times.
 
 Absences drawn to match the presences' distance to roads (my preferred setting,
 see Limitations):
@@ -78,8 +80,10 @@ Reading the tables:
 - Road access is a big shortcut. With uniform absences, road distance alone
   scores 0.74, and adding it takes the random forest from 0.77 to 0.81. With
   matched absences it adds nothing (0.72 either way). The terrain-only random
-  forest at about 0.72 is the number I'd quote; it stays between 0.69 and 0.73
-  across the 12 block, buffer and cutoff settings.
+  forest at about 0.70, give or take 0.02, is the number I'd quote. The 0.72 in
+  the table is one absence draw and a little high (see the redraw results
+  below). It stays between 0.69 and 0.73 across the 12 block, buffer and cutoff
+  settings.
 - River distance adds almost nothing. With matched absences the terrain-only
   random forest goes from 0.721 to 0.728, which is smaller than the seed spread
   (0.017 to 0.021), and river distance alone scores 0.49, which is chance. With
@@ -91,8 +95,28 @@ Reading the tables:
   locations are only good to 5 km or worse, so presences don't cluster at the
   30 m scale the features see. I haven't tested that.
 - Some of the uniform-absence skill was road access and not terrain: the random
-  forest drops from 0.77 to 0.72 once absences are no longer easy to find in
-  remote terrain.
+  forest drops from 0.77 to about 0.70 once absences are no longer easy to find
+  in remote terrain.
+
+Redrawing the absences, 20 draws per scheme at the headline setting, with the
+CV fold seed fixed at 0 (`src/absence_variation.py`, `results/absence_variation.csv`).
+Spatial-CV AUROC, mean ± sd across draws:
+
+| Model | Matched absences | Uniform absences |
+|---|---|---|
+| Slope only | 0.652 ± 0.011 | 0.534 ± 0.019 |
+| Logistic regression (terrain) | 0.665 ± 0.015 | 0.659 ± 0.020 |
+| Random forest (terrain) | 0.704 ± 0.017 | 0.774 ± 0.014 |
+| Random forest + road distance (ablation) | 0.704 ± 0.016 | 0.814 ± 0.014 |
+
+- The spread from redrawing absences (0.011 to 0.020) is as large as the spread
+  from fold assignment (0.017 to 0.021), so the real uncertainty on a single
+  score is closer to ±0.02 or ±0.03 than to ±0.01.
+- The one draw in the tables above scored 0.711 with this fold seed against a
+  mean of 0.704, so it was a bit lucky. The conclusions don't change: road
+  distance still adds nothing with matched absences (0.704 either way) and
+  still adds about 0.04 with uniform ones.
+- The gap stays near zero in every draw (-0.03 to +0.05).
 
 ## Limitations
 
@@ -126,8 +150,9 @@ Reading the tables:
   (about 66,600 km) are left out because how well they are mapped probably
   follows mapping effort, and canals, ditches and drains are man-made. Results
   could differ with streams included.
-- Each scheme is one absence draw. The seed spread (0.01 to 0.02) covers fold
-  assignment only, not drawing different absences.
+- The tables use one absence draw per scheme. The redraw section above shows
+  how much that matters (sd 0.01 to 0.02), but it runs one fold seed and four
+  models, not the whole grid of settings.
 - No water mask, so some absences may land on rivers or lakes. Absence locations
   come from a 300 m grid. One UTM zone (45N) covers all of Nepal; the scale error
   at the western edge is under 1%.
@@ -162,6 +187,8 @@ pytest
 # If the OSM .pbf lives elsewhere, point NEPAL_RAW_DIR at its folder.
 python -m src.build_feature_table    # terrain + road and river distance, two absence sets
 python -m src.run_baselines          # writes results/baselines_roads.csv
+python -m src.build_feature_table --draws 20   # 20 absence draws per scheme
+python -m src.absence_variation      # writes results/absence_variation.csv
 ```
 
 ## Repository layout
@@ -175,5 +202,6 @@ src/roads.py      OSM roads and rivers, distance to nearest line, presence-match
 src/grid.py       shared 30 m UTM grid, DEM warping, terrain features at points
 src/build_feature_table.py  terrain + road and river distance, uniform and road-weighted absences
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
+src/absence_variation.py    score repeated absence draws at the headline setting
 tests/            synthetic-data tests, including the leakage demonstration
 ```
