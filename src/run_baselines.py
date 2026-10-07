@@ -20,6 +20,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from .climate_cover import LC_COLS
 from .modeling import compare_cv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,11 @@ MODELS = {
     "Random forest + river distance": (TERRAIN + ["log_river_dist"], _forest()),
     "River distance only (logistic)": (["log_river_dist"], _logit()),
     "Random forest + road + river distance": (TERRAIN + ["log_road_dist", "log_river_dist"], _forest()),
+    "Random forest + rainfall": (TERRAIN + ["rain_mm"], _forest()),
+    "Random forest + land cover": (TERRAIN + LC_COLS, _forest()),
+    "Random forest + rainfall + land cover": (TERRAIN + ["rain_mm", *LC_COLS], _forest()),
+    "Rainfall only (logistic)": (["rain_mm"], _logit()),
+    "Land cover only (forest)": (LC_COLS, _forest()),
 }
 
 

@@ -15,11 +15,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .climate_cover import LC_COLS
 from .modeling import compare_cv
-from .run_baselines import HEADLINE, MODELS
+from .run_baselines import HEADLINE, MODELS, TERRAIN, _forest
 
 ROOT = Path(__file__).resolve().parents[1]
-USE = ["Slope only (logistic)", "Logistic regression", "Random forest", "Random forest + road distance (ablation)"]
+USE = ["Slope only (logistic)", "Logistic regression", "Random forest", "Random forest + road distance (ablation)",
+       "Random forest + rainfall", "Random forest + land cover"]
+# land cover without the classes most likely to stand in for access or flat farmland
+NO_ACCESS = [c for c in LC_COLS if c not in ("lc_built", "lc_crop")]
+EXTRA = {"Random forest + land cover (no built, crop)": (TERRAIN + NO_ACCESS, _forest())}
 
 
 def main() -> None:
@@ -28,12 +33,12 @@ def main() -> None:
     table["log_river_dist"] = np.log(table["river_dist_km"] + 0.01)
     pres = table[(table.label == 1) & (table.accuracy_km <= HEADLINE["cutoff"])]
 
+    models = {**{n: MODELS[n] for n in USE}, **EXTRA}
     rows = []
     for (abs_set, k), absences in table[table.label == 0].groupby(["abs_set", "draw"]):
         d = pd.concat([pres, absences])
         y, coords = d.label.to_numpy(), d[["x", "y"]].to_numpy()
-        for name in USE:
-            cols, make = MODELS[name]
+        for name, (cols, make) in models.items():
             res = compare_cv(make, d[cols].to_numpy(), y, coords, HEADLINE["block_km"] * 1000.0, 5,
                              HEADLINE["buffer_km"] * 1000.0, 0)
             rows.append({"abs_set": abs_set, "draw": k, "model": name, "n_abs": int((1 - y).sum()),
