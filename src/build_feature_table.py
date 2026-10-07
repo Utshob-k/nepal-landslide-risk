@@ -27,12 +27,19 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from shapely import contains_xy
 
+from .climate_cover import LC_COLS, landcover_shares, mean_annual_rainfall, sample_raster
 from .grid import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
 from .roads import BIN_EDGES_KM, distance_to_lines, extract_motor_roads, extract_rivers, presence_matched_weights
 from .sampling import sample_background
 
 ROADS_GPKG = RAW.parent / "processed" / "roads_motor.gpkg"
 RIVERS_GPKG = RAW.parent / "processed" / "rivers.gpkg"
+LC_RADIUS_KM = 2.5
+
+
+def raw_dir() -> Path:
+    """Where the big downloads live: NEPAL_RAW_DIR if set, else data/raw."""
+    return Path(os.environ.get("NEPAL_RAW_DIR", RAW))
 
 
 def bin_shares(dist_m: np.ndarray) -> list[float]:
@@ -44,13 +51,13 @@ def main(n_draws: int = 1) -> None:
     cutoff, ratio, seed = 5.0, 5, 0  # accuracy cutoff in km, absences per presence, rng seed
 
     if not ROADS_GPKG.exists():
-        pbf = Path(os.environ.get("NEPAL_RAW_DIR", RAW)) / "nepal-latest.osm.pbf"
+        pbf = raw_dir() / "nepal-latest.osm.pbf"
         print("extracting roads from", pbf)
         extract_motor_roads(pbf, ROADS_GPKG, CRS)
     lines = gpd.read_file(ROADS_GPKG).geometry.values
 
     if not RIVERS_GPKG.exists():
-        pbf = Path(os.environ.get("NEPAL_RAW_DIR", RAW)) / "nepal-latest.osm.pbf"
+        pbf = raw_dir() / "nepal-latest.osm.pbf"
         print("extracting rivers from", pbf)
         extract_rivers(pbf, RIVERS_GPKG, CRS)
     rivers = gpd.read_file(RIVERS_GPKG).geometry.values
@@ -108,13 +115,30 @@ def main(n_draws: int = 1) -> None:
     table["road_dist_km"] = distance_to_lines(table["x"].to_numpy(), table["y"].to_numpy(), lines) / 1000.0
     table["river_dist_km"] = distance_to_lines(table["x"].to_numpy(), table["y"].to_numpy(), rivers) / 1000.0
 
+    # rainfall: mean of the annual totals, read at the cell the point falls in
+    chirps = sorted((raw_dir() / "chirps_annual").glob("chirps-v3.0.*.tif"))
+    years = [int(f.stem.rsplit(".", 1)[1]) for f in chirps]
+    if years != list(range(1991, 2021)):
+        raise SystemExit(f"Expected CHIRPS annual files 1991 to 2020 in {raw_dir() / 'chirps_annual'}, found {years}.")
+    rain, rain_t = mean_annual_rainfall(chirps, (79.9, 26.2, 88.4, 30.6))
+    table["rain_mm"] = sample_raster(rain, rain_t, table["longitude"].to_numpy(), table["latitude"].to_numpy())
+
+    # land cover: share of each class within LC_RADIUS_KM of the point
+    wc_tiles = sorted((raw_dir() / "worldcover").glob("ESA_WorldCover_10m_2021_v200_*_Map.tif"))
+    if len(wc_tiles) != 8:
+        raise SystemExit(f"Expected 8 WorldCover tiles in {raw_dir() / 'worldcover'}, found {len(wc_tiles)}.")
+    shares = landcover_shares(table["longitude"].to_numpy(), table["latitude"].to_numpy(), wc_tiles, LC_RADIUS_KM)
+    for name, values in shares.items():
+        table[name] = values
+
     n_before = len(table)
-    table = table.dropna(subset=["elevation", "slope", "curvature"])
+    table = table.dropna(subset=["elevation", "slope", "curvature", "rain_mm", *LC_COLS])
     table = table[~table.duplicated(subset=["abs_set", "draw", "row", "col"])].copy()
     table["inside_nepal"] = contains_xy(nepal_geom, table["x"].to_numpy(), table["y"].to_numpy())
 
     cols = ["label", "abs_set", "event_id", "event_date", "accuracy_km", "longitude", "latitude", "x", "y",
-            "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "river_dist_km", "inside_nepal"]
+            "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "river_dist_km",
+            "rain_mm", *LC_COLS, "inside_nepal"]
     OUT.mkdir(parents=True, exist_ok=True)
     if n_draws > 1:  # extra absence draws for src/absence_variation.py; the main table and its meta stay as they are
         table[[*cols, "draw"]].to_csv(OUT / "features_roads_draws.csv", index=False)
@@ -131,6 +155,14 @@ def main(n_draws: int = 1) -> None:
         "motor_ways": int(len(lines)),
         "river_definition": "OSM waterway=river only (no stream, canal, ditch or drain)",
         "river_ways": int(len(rivers)),
+        "rainfall": "CHIRPS v3.0 annual totals 1991 to 2020, mean, 0.05 degree cell read at the point (mm/yr)",
+        "land_cover": f"ESA WorldCover 2021 v200 class shares within {LC_RADIUS_KM} km of the point; "
+                      "groups tree, shrub, grass, crop, built, bare, snow, other (water, wetland, mangrove, moss); "
+                      "no-data pixels left out of the shares",
+        "median_rain_mm": {k: round(float(table[table.abs_set == k]["rain_mm"].median()))
+                           for k in ("presence", "uniform", "road_weighted")},
+        "mean_land_cover_share": {c: {k: round(float(table[table.abs_set == k][c].mean()), 3)
+                                      for k in ("presence", "uniform", "road_weighted")} for c in LC_COLS},
         "median_river_dist_km": {k: round(float(table[table.abs_set == k]["river_dist_km"].median()), 2)
                                  for k in ("presence", "uniform", "road_weighted")},
         "road_distance_bins_km": BIN_EDGES_KM.tolist()[:-1] + ["inf"],
