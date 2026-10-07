@@ -37,9 +37,8 @@ terrain knowledge at all. The study measures the same gap on real data.
 
 Work in progress. So far the features are terrain (elevation, slope, aspect,
 a curvature proxy), distance to the nearest motor road and to the nearest
-river, mean annual rainfall, and land-cover shares around the point. Gradient
-boosting hasn't been run. These numbers describe a partial model and are not a
-hazard forecast.
+river, mean annual rainfall, and land-cover shares around the point. These
+numbers describe a partial model and are not a hazard forecast.
 
 Setup, fixed before running: 5-fold spatial block CV, 50 km blocks, 10 km
 buffer, 194 presences (catalogue location accuracy 5 km or better), 975
@@ -67,6 +66,9 @@ see Limitations):
 | Random forest + rainfall + land cover | 0.75 | 0.79 | 0.05 |
 | Rainfall only (diagnostic) | 0.55 | 0.57 | 0.03 |
 | Land cover only (diagnostic) | 0.73 | 0.78 | 0.05 |
+| Gradient boosting (terrain) | 0.72 | 0.73 | 0.01 |
+| Gradient boosting + land cover | 0.77 | 0.80 | 0.03 |
+| Gradient boosting + rainfall + land cover | 0.76 | 0.80 | 0.04 |
 
 Absences drawn uniformly over Nepal:
 
@@ -85,6 +87,9 @@ Absences drawn uniformly over Nepal:
 | Random forest + rainfall + land cover | 0.81 | 0.84 | 0.03 |
 | Rainfall only (diagnostic) | 0.64 | 0.66 | 0.02 |
 | Land cover only (diagnostic) | 0.79 | 0.83 | 0.04 |
+| Gradient boosting (terrain) | 0.77 | 0.78 | 0.01 |
+| Gradient boosting + land cover | 0.80 | 0.82 | 0.02 |
+| Gradient boosting + rainfall + land cover | 0.80 | 0.83 | 0.03 |
 
 Reading the tables:
 
@@ -108,6 +113,10 @@ Reading the tables:
   is probably a settlement and access proxy, and crop share separates the flat
   farmland of the Terai from the hills. So I wouldn't call the full gain skill
   from land.
+- Gradient boosting does about the same as the random forest (0.724 against 0.721
+  for terrain only with matched absences, 0.771 against 0.758 with land cover).
+  The redraw below says the difference is noise, so the more complex model
+  doesn't earn its place here.
 - Rainfall adds nothing: 0.710 with matched absences against 0.721 for terrain
   alone, and 0.546 on its own. CHIRPS cells are about 5.5 km, so it is smooth
   across most of a block.
@@ -134,6 +143,8 @@ Spatial-CV AUROC, mean ± sd across draws:
 | Random forest + rainfall | 0.711 ± 0.018 | 0.776 ± 0.011 |
 | Random forest + land cover | 0.749 ± 0.013 | 0.819 ± 0.013 |
 | Random forest + land cover, no built-up or crop | 0.713 ± 0.014 | 0.788 ± 0.016 |
+| Gradient boosting (terrain) | 0.703 ± 0.016 | 0.780 ± 0.014 |
+| Gradient boosting + land cover | 0.750 ± 0.013 | 0.819 ± 0.013 |
 
 - The spread from redrawing absences (0.011 to 0.020) is as large as the spread
   from fold assignment (0.017 to 0.021), so the real uncertainty on a single
@@ -151,6 +162,11 @@ Spatial-CV AUROC, mean ± sd across draws:
   | land cover without built-up and crop | +0.010 (15/20) | +0.014 (18/20) |
   | rainfall | +0.007 (14/20) | +0.003 (12/20) |
   | road distance | +0.001 (13/20) | +0.040 (20/20) |
+- Gradient boosting against the random forest in the same draw: -0.001 (10 of
+  20 higher) with matched absences and +0.007 (14 of 20) with uniform; with land
+  cover +0.001 (9 of 20) and +0.000 (10 of 20). So the single-draw edge for
+  gradient boosting with land cover in the tables above (0.771 against 0.758) is
+  noise.
 - The gap stays small in every draw (-0.03 to +0.06).
 
 Leakage check (`src/leakage_check.py`, `results/leakage_check.csv`): the same
@@ -225,6 +241,8 @@ Spatial-CV AUROC, and in brackets the gap to random CV:
 - The absence weights match road distance only. Land cover also differs between
   presences and matched absences (more tree, less crop), and I haven't tried
   matching on it.
+- Gradient boosting uses fixed settings (depth 3, learning rate 0.05, 200
+  iterations) that weren't tuned, so a tuned model might do a bit better.
 - No water mask, so some absences may land on rivers or lakes. Absence locations
   come from a 300 m grid. One UTM zone (45N) covers all of Nepal; the scale error
   at the western edge is under 1%.

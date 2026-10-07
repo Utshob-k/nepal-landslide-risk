@@ -21,7 +21,7 @@ from .run_baselines import HEADLINE, MODELS, TERRAIN, _forest
 
 ROOT = Path(__file__).resolve().parents[1]
 USE = ["Slope only (logistic)", "Logistic regression", "Random forest", "Random forest + road distance (ablation)",
-       "Random forest + rainfall", "Random forest + land cover"]
+       "Random forest + rainfall", "Random forest + land cover", "Gradient boosting", "Gradient boosting + land cover"]
 # land cover without the classes most likely to stand in for access or flat farmland
 NO_ACCESS = [c for c in LC_COLS if c not in ("lc_built", "lc_crop")]
 EXTRA = {"Random forest + land cover (no built, crop)": (TERRAIN + NO_ACCESS, _forest())}

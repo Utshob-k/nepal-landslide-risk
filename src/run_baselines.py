@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -36,6 +36,13 @@ def _forest():
     return lambda: RandomForestClassifier(200, min_samples_leaf=5, class_weight="balanced", n_jobs=4, random_state=0)
 
 
+def _boost():
+    """Shallow trees, slow learning rate, fixed in advance and not tuned on the CV scores."""
+    return lambda: HistGradientBoostingClassifier(
+        max_depth=3, learning_rate=0.05, max_iter=200, min_samples_leaf=20, l2_regularization=1.0,
+        class_weight="balanced", random_state=0)
+
+
 MODELS = {
     "Slope only (logistic)": (["slope"], _logit()),
     "Elevation only (logistic)": (["elevation"], _logit()),
@@ -51,6 +58,9 @@ MODELS = {
     "Random forest + rainfall + land cover": (TERRAIN + ["rain_mm", *LC_COLS], _forest()),
     "Rainfall only (logistic)": (["rain_mm"], _logit()),
     "Land cover only (forest)": (LC_COLS, _forest()),
+    "Gradient boosting": (TERRAIN, _boost()),
+    "Gradient boosting + land cover": (TERRAIN + LC_COLS, _boost()),
+    "Gradient boosting + rainfall + land cover": (TERRAIN + ["rain_mm", *LC_COLS], _boost()),
 }
 
 
