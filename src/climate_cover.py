@@ -1,18 +1,14 @@
-"""Mean annual rainfall (CHIRPS) and land-cover shares (ESA WorldCover) at points.
+"""Mean annual rainfall (CHIRPS) and land-cover shares (WorldCover) at points.
 
-Rainfall: average a stack of annual-total rasters that share one grid, cropped to
-Nepal, and read the cell a point falls in. CHIRPS is 0.05 degrees (about 5.5 km),
-so it cannot resolve anything local; that is about the catalogue's own location
-accuracy.
+Rainfall: mean of the annual-total rasters, read at the cell a point falls in.
+Cells are 0.05 degrees (about 5.5 km), so nothing local.
 
-Land cover: a single 10 m class at a point is noisy when the location may be
-5 km off, so each point gets the share of every main class inside a circle
-around it (default radius 2.5 km). Only the windows around points are read, not
-whole tiles. Tiles must sit on one pixel grid anchored at (-180, 90), as the
-WorldCover tiles do. Pixels with value 0 (no data) are left out of the shares.
+Land cover: one 10 m class at a point is noisy when the location may be 5 km off,
+so each point gets the share of each class inside a circle (2.5 km by default).
+Only windows around points are read. Tiles must sit on one pixel grid anchored at
+(-180, 90), like WorldCover's. Value 0 is no data and is left out.
 
-Both layers are in lon/lat (EPSG:4326), so points are given as longitude and
-latitude, not the UTM x, y used elsewhere.
+Both layers are lon/lat, so points are longitude and latitude, not UTM x, y.
 """
 from __future__ import annotations
 
@@ -24,7 +20,7 @@ from rasterio.windows import from_bounds
 
 M_PER_DEG = 111_320.0
 
-# WorldCover class codes, grouped. Water, wetland, mangrove and moss are rare in Nepal.
+# WorldCover codes, grouped; the last group is rare in Nepal
 GROUPS = {
     "lc_tree": (10,),
     "lc_shrub": (20,),
@@ -39,9 +35,9 @@ LC_COLS = list(GROUPS)
 
 
 def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, float]):
-    """Mean of annual-total rasters over `bounds` (left, bottom, right, top, degrees).
+    """Mean of annual-total rasters on one grid, cropped to `bounds` (left, bottom, right, top, degrees).
 
-    All files must share one grid. Returns (array, transform) for the cropped window.
+    Returns the array and its transform.
     """
     with rasterio.open(files[0]) as first:
         window = from_bounds(*bounds, first.transform).round_offsets().round_lengths()
@@ -55,7 +51,7 @@ def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, f
 
 
 def sample_raster(arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
-    """Value of the cell each point falls in; NaN for points outside the array."""
+    """Value of the cell each point falls in, NaN outside the array."""
     rows = np.floor((transform.f - np.asarray(lat)) / -transform.e).astype(int)
     cols = np.floor((np.asarray(lon) - transform.c) / transform.a).astype(int)
     ok = (rows >= 0) & (rows < arr.shape[0]) & (cols >= 0) & (cols < arr.shape[1])
@@ -67,7 +63,7 @@ def sample_raster(arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray) 
 def landcover_shares(
     lon: np.ndarray, lat: np.ndarray, tiles: list[Path], radius_km: float = 2.5
 ) -> dict[str, np.ndarray]:
-    """Share of each class group within `radius_km` of each point; NaN where no valid pixel is covered."""
+    """Share of each class group within `radius_km` of each point, NaN where no valid pixel is covered."""
     srcs = [rasterio.open(t) for t in tiles]
     try:
         res = srcs[0].res[0]

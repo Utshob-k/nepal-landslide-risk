@@ -1,12 +1,10 @@
-"""How much does the score move when the absences are drawn again?
+"""Score the headline setting once per absence draw, to see how much the result moves.
 
     python -m src.build_feature_table --draws 20
     python -m src.absence_variation
 
-Scores the headline setting (50 km blocks, 10 km buffer, accuracy <= 5 km) once
-per absence draw and scheme, with the CV fold seed held fixed, so the spread
-across draws is the part the baselines table does not show. Writes
-results/absence_variation.csv and prints mean, sd and range per model.
+The CV fold seed is fixed, so the spread comes from the absences only.
+Writes results/absence_variation.csv.
 """
 from __future__ import annotations
 
@@ -22,7 +20,7 @@ from .run_baselines import HEADLINE, MODELS, TERRAIN, _forest
 ROOT = Path(__file__).resolve().parents[1]
 USE = ["Slope only (logistic)", "Logistic regression", "Random forest", "Random forest + road distance (ablation)",
        "Random forest + rainfall", "Random forest + land cover", "Gradient boosting", "Gradient boosting + land cover"]
-# land cover without the classes most likely to stand in for access or flat farmland
+# land cover without built-up and crop (likely access and farmland proxies)
 NO_ACCESS = [c for c in LC_COLS if c not in ("lc_built", "lc_crop")]
 EXTRA = {"Random forest + land cover (no built, crop)": (TERRAIN + NO_ACCESS, _forest())}
 

@@ -21,7 +21,7 @@ def test_aspect_faces_downhill_in_compass_terms():
     rising_east = np.tile(np.arange(20) * cell, (20, 1))
     assert aspect_degrees(rising_east, cell)[10, 10] == pytest.approx(270.0)  # faces west
 
-    # Row 0 is north, so values that DEcrease with row index rise toward the north.
+    # row 0 is north, so values that fall with row index rise to the north
     rising_north = np.tile((19 - np.arange(20))[:, None] * cell, (1, 20))
     assert aspect_degrees(rising_north, cell)[10, 10] == pytest.approx(180.0)  # faces south
 

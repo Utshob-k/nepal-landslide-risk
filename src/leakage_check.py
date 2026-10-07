@@ -1,15 +1,12 @@
-"""Can the CV code see leakage on this data? Give the model the coordinates and find out.
+"""Can the CV see leakage here? Give the model the coordinates and look at the gap.
 
     python -m src.leakage_check
 
-The baselines show a random-vs-spatial gap near zero. That is only believable if
-the same code does show a gap when the model can use location. So: score a forest
-on terrain, on terrain + x, y, and on x, y alone, under random and spatial CV, at
-the headline setting. Coordinates should score well under random CV (neighbours
-sit in both train and test) and fall under spatial CV. Also prints how clustered
-the presences are. Then repeats terrain and x, y only at larger blocks (100, 200 km):
-if x, y keeps scoring there, the signal is regional, not local. Writes
-results/leakage_check.csv.
+Forest on terrain, terrain + x, y, and x, y alone, under random and spatial CV at
+the headline setting. With coordinates, random CV should beat spatial CV. Then
+terrain and x, y alone at 100 and 200 km blocks: if x, y still scores there, the
+signal is regional. Also prints how clustered the presences are.
+Writes results/leakage_check.csv.
 """
 from __future__ import annotations
 

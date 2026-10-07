@@ -1,12 +1,10 @@
-"""Baselines under random vs spatial-block CV, on both absence sets, with a road-distance ablation.
+"""Baselines under random and spatial-block CV on both absence sets, with the road-distance ablation.
 
-    .venv312/Scripts/python -m src.run_baselines
+    python -m src.run_baselines
 
-Headline setting is fixed in advance: 50 km blocks, 10 km buffer, presences
-with location accuracy <= 5 km. Every other setting is reported as sensitivity.
-Table: data/tables/features_roads.csv (src/build_feature_table.py). Still PARTIAL: terrain,
-road distance and river distance only. Two absence sets: `uniform` and `road_weighted`; comparing them shows how much
-of a score is road access. CPU only.
+Headline setting, fixed in advance: 50 km blocks, 10 km buffer, presences with
+accuracy <= 5 km. Every other setting is sensitivity. Reads data/tables/features_roads.csv,
+writes results/baselines_roads.csv. CPU only.
 """
 from __future__ import annotations
 
@@ -28,6 +26,7 @@ TERRAIN = ["elevation", "slope", "aspect_sin", "aspect_cos", "curvature"]
 SEEDS = range(5)
 HEADLINE = {"cutoff": 5.0, "block_km": 50, "buffer_km": 10}
 
+
 def _logit(max_iter: int = 100):
     return lambda: make_pipeline(StandardScaler(), LogisticRegression(class_weight="balanced", max_iter=max_iter))
 
@@ -37,7 +36,7 @@ def _forest():
 
 
 def _boost():
-    """Shallow trees, slow learning rate, fixed in advance and not tuned on the CV scores."""
+    """Shallow trees, slow learning rate. Fixed in advance, not tuned on the CV scores."""
     return lambda: HistGradientBoostingClassifier(
         max_depth=3, learning_rate=0.05, max_iter=200, min_samples_leaf=20, l2_regularization=1.0,
         class_weight="balanced", random_state=0)

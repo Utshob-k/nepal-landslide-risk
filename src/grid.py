@@ -1,10 +1,7 @@
-"""Shared grid, DEM warping and terrain features at points.
+"""Shared 30 m grid in UTM 45N, DEM warping, and terrain at points.
 
-Everything is on one grid: EPSG:32645 (UTM 45N) at 30 m, for all of Nepal.
-Far-west Nepal lies in zone 44N; using 45N throughout costs well under 1 %
-scale error at the western edge, which is fine for slope.
-
-The table itself is built by src/build_feature_table.py.
+Far-west Nepal is in zone 44N. Using 45N everywhere is under 1% scale error
+there, fine for slope.
 """
 from __future__ import annotations
 
@@ -28,8 +25,8 @@ from .terrain import (
 
 CRS = "EPSG:32645"
 CELL = 30.0  # metres
-COARSE = 300.0  # metres; grid used only to draw absence locations
-HALF = 2  # patch half-width in cells used for the terrain derivatives
+COARSE = 300.0  # metres, only used to draw absence locations
+HALF = 2  # patch half-width in cells for the terrain derivatives
 ACC_KM = {"exact": 0.0, "1km": 1.0, "5km": 5.0, "10km": 10.0, "25km": 25.0, "50km": 50.0}
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +35,7 @@ OUT = ROOT / "data" / "tables"
 
 
 def make_grid():
-    """Nepal polygon in UTM 45N plus the shared 30 m grid (row 0 = north), padded 1 km."""
+    """Nepal polygon in UTM 45N and the shared grid (row 0 = north), padded 1 km."""
     nepal = gpd.read_file(RAW / "geoBoundaries-NPL-ADM0.geojson").to_crs(CRS)
     xmin, ymin, xmax, ymax = nepal.total_bounds
     pad = 1000.0
@@ -57,7 +54,7 @@ def load_presences(path: Path) -> pd.DataFrame:
 
 
 def build_dem(nepal_utm, tiles: list[Path], transform, shape) -> np.ndarray:
-    """Warp every tile that touches Nepal onto the shared 30 m UTM grid (NaN = no data)."""
+    """Warp every tile that touches Nepal onto the grid (NaN = no data)."""
     dem = np.full(shape, np.nan, dtype=np.float32)
     used = 0
     for tif in tiles:
@@ -81,7 +78,7 @@ def build_dem(nepal_utm, tiles: list[Path], transform, shape) -> np.ndarray:
 
 
 def terrain_at(dem: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> pd.DataFrame:
-    """Terrain features at (row, col) from a small patch around each cell."""
+    """Terrain features at (row, col), from a small patch around each cell."""
     out = {k: np.full(len(rows), np.nan) for k in ("elevation", "slope", "aspect_sin", "aspect_cos", "curvature")}
     h, w = dem.shape
     for i, (r, c) in enumerate(zip(rows, cols, strict=True)):
