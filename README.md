@@ -36,9 +36,10 @@ terrain knowledge at all. The study measures the same gap on real data.
 ## Results
 
 Work in progress. So far the features are terrain (elevation, slope, aspect,
-a curvature proxy) and distance to the nearest motor road and to the nearest
-river. Rainfall and land cover aren't in yet and gradient boosting hasn't been
-run. These numbers describe a partial model and are not a hazard forecast.
+a curvature proxy), distance to the nearest motor road and to the nearest
+river, mean annual rainfall, and land-cover shares around the point. Gradient
+boosting hasn't been run. These numbers describe a partial model and are not a
+hazard forecast.
 
 Setup, fixed before running: 5-fold spatial block CV, 50 km blocks, 10 km
 buffer, 194 presences (catalogue location accuracy 5 km or better), 975
@@ -61,6 +62,11 @@ see Limitations):
 | Random forest + river distance | 0.73 | 0.74 | 0.02 |
 | Random forest + road + river distance | 0.73 | 0.75 | 0.02 |
 | River distance only (diagnostic) | 0.49 | 0.51 | 0.02 |
+| Random forest + rainfall | 0.71 | 0.74 | 0.03 |
+| Random forest + land cover | 0.76 | 0.80 | 0.04 |
+| Random forest + rainfall + land cover | 0.75 | 0.79 | 0.05 |
+| Rainfall only (diagnostic) | 0.55 | 0.57 | 0.03 |
+| Land cover only (diagnostic) | 0.73 | 0.78 | 0.05 |
 
 Absences drawn uniformly over Nepal:
 
@@ -74,6 +80,11 @@ Absences drawn uniformly over Nepal:
 | Random forest + river distance | 0.77 | 0.78 | 0.01 |
 | Random forest + road + river distance | 0.81 | 0.83 | 0.01 |
 | River distance only (diagnostic) | 0.58 | 0.59 | 0.01 |
+| Random forest + rainfall | 0.77 | 0.80 | 0.02 |
+| Random forest + land cover | 0.80 | 0.83 | 0.03 |
+| Random forest + rainfall + land cover | 0.81 | 0.84 | 0.03 |
+| Rainfall only (diagnostic) | 0.64 | 0.66 | 0.02 |
+| Land cover only (diagnostic) | 0.79 | 0.83 | 0.04 |
 
 Reading the tables:
 
@@ -89,7 +100,20 @@ Reading the tables:
   (0.017 to 0.021), and river distance alone scores 0.49, which is chance. With
   uniform absences it alone scores 0.58, so it looks like a weak access proxy
   and not terrain skill.
-- The random-vs-spatial gap is close to zero everywhere (-0.02 to +0.04), where
+- Land cover is the first feature that adds clear skill. With matched absences
+  the terrain forest goes from 0.721 to 0.758, and land cover alone scores 0.731.
+  Redrawing the absences (below) puts the gain at +0.045, and it shows up in
+  all 20 draws. Most of it comes from two classes, though: without the built-up
+  and crop shares it falls to +0.010, which is inside the noise. Built-up share
+  is probably a settlement and access proxy, and crop share separates the flat
+  farmland of the Terai from the hills. So I wouldn't call the full gain skill
+  from land.
+- Rainfall adds nothing: 0.710 with matched absences against 0.721 for terrain
+  alone, and 0.546 on its own. CHIRPS cells are about 5.5 km, so it is smooth
+  across most of a block.
+- The random-vs-spatial gap is close to zero for the terrain features
+  (-0.02 to +0.05 over everything here; the land-cover models have the biggest
+  gaps, 0.03 to 0.05), where
   the synthetic benchmark in `tests/` shows about 0.3. I checked that the CV
   code can see a gap at all by giving the model the coordinates (see the leakage
   check below); it can, so the small terrain gap is a result and not a bug.
@@ -107,6 +131,9 @@ Spatial-CV AUROC, mean ± sd across draws:
 | Logistic regression (terrain) | 0.665 ± 0.015 | 0.659 ± 0.020 |
 | Random forest (terrain) | 0.704 ± 0.017 | 0.774 ± 0.014 |
 | Random forest + road distance (ablation) | 0.704 ± 0.016 | 0.814 ± 0.014 |
+| Random forest + rainfall | 0.711 ± 0.018 | 0.776 ± 0.011 |
+| Random forest + land cover | 0.749 ± 0.013 | 0.819 ± 0.013 |
+| Random forest + land cover, no built-up or crop | 0.713 ± 0.014 | 0.788 ± 0.016 |
 
 - The spread from redrawing absences (0.011 to 0.020) is as large as the spread
   from fold assignment (0.017 to 0.021), so the real uncertainty on a single
@@ -115,7 +142,16 @@ Spatial-CV AUROC, mean ± sd across draws:
   mean of 0.704, so it was a bit lucky. The conclusions don't change: road
   distance still adds nothing with matched absences (0.704 either way) and
   still adds about 0.04 with uniform ones.
-- The gap stays near zero in every draw (-0.03 to +0.05).
+- Paired against the terrain forest in the same draw (change in spatial AUROC, and how
+  many of the 20 draws came out higher):
+
+  | Added | Matched absences | Uniform absences |
+  |---|---|---|
+  | land cover | +0.045 (20/20) | +0.045 (20/20) |
+  | land cover without built-up and crop | +0.010 (15/20) | +0.014 (18/20) |
+  | rainfall | +0.007 (14/20) | +0.003 (12/20) |
+  | road distance | +0.001 (13/20) | +0.040 (20/20) |
+- The gap stays small in every draw (-0.03 to +0.06).
 
 Leakage check (`src/leakage_check.py`, `results/leakage_check.csv`): the same
 random forest, headline setting, 5 fold seeds, with and without coordinates.
@@ -178,8 +214,17 @@ Spatial-CV AUROC, and in brackets the gap to random CV:
   follows mapping effort, and canals, ditches and drains are man-made. Results
   could differ with streams included.
 - The tables use one absence draw per scheme. The redraw section above shows
-  how much that matters (sd 0.01 to 0.02), but it runs one fold seed and four
-  models, not the whole grid of settings.
+  how much that matters (sd 0.01 to 0.02), but it runs one fold seed and a
+  handful of models, not the whole grid of settings.
+- Land cover is read as class shares within 2.5 km of the point, because
+  catalogue locations are only good to 5 km. I didn't tune that radius.
+  WorldCover is the 2021 map and the events are 2007 to 2016, so land cover may
+  have changed in between.
+- Rainfall is the mean of CHIRPS annual totals for 1991 to 2020 at 0.05 degree
+  cells (about 5.5 km), so it can't resolve local differences.
+- The absence weights match road distance only. Land cover also differs between
+  presences and matched absences (more tree, less crop), and I haven't tried
+  matching on it.
 - No water mask, so some absences may land on rivers or lakes. Absence locations
   come from a 300 m grid. One UTM zone (45N) covers all of Nepal; the scale error
   at the western edge is under 1%.
@@ -189,7 +234,7 @@ Spatial-CV AUROC, and in brackets the gap to random CV:
 See [`data/README.md`](data/README.md). Nothing large is committed; each
 source's licence applies.
 
-Versions used so far (downloaded 2026-10-05):
+Versions used so far (downloaded 2026-10-05, and 2026-10-06 for rainfall and land cover):
 
 - Landslides: NASA Global Landslide Catalog, legacy CSV export
   (`Global_Landslide_Catalog_Export_rows.csv`, Nepal 2007 to 2016). Licence not
@@ -201,6 +246,13 @@ Versions used so far (downloaded 2026-10-05):
 - Roads and rivers: Geofabrik Nepal extract (`nepal-latest.osm.pbf`, last modified
   2026-10-03, md5 `d098ee3d64113fbc596a99fb6cf55232`). Contains data from
   OpenStreetMap contributors, ODbL.
+- Rainfall: CHIRPS v3.0 annual totals, global GeoTIFFs for 1991 to 2020
+  (`chirps-v3.0.YYYY.tif` from `data.chc.ucsb.edu/products/CHIRPS/v3.0/annual/global/tifs/`),
+  put in a `chirps_annual/` folder. Climate Hazards Center, CC BY 4.0,
+  doi 10.15780/G2JQ0P.
+- Land cover: ESA WorldCover 2021 v200, 10 m, the 8 tiles N24E084, N24E087,
+  N27E078, N27E081, N27E084, N27E087, N30E078 and N30E081 (AWS open bucket
+  `esa-worldcover`, `v200/2021/map/`), put in a `worldcover/` folder. CC BY 4.0.
 
 ## Run
 
@@ -211,8 +263,8 @@ pip install -r requirements-geo.txt        # raster/vector libraries, when you r
 pytest
 
 # Build the tables and run the baselines (raw data in data/raw, see data/README.md).
-# If the OSM .pbf lives elsewhere, point NEPAL_RAW_DIR at its folder.
-python -m src.build_feature_table    # terrain + road and river distance, two absence sets
+# If the OSM .pbf, chirps_annual/ and worldcover/ live elsewhere, point NEPAL_RAW_DIR at their folder.
+python -m src.build_feature_table    # terrain, road and river distance, rainfall, land cover; two absence sets
 python -m src.run_baselines          # writes results/baselines_roads.csv
 python -m src.build_feature_table --draws 20   # 20 absence draws per scheme
 python -m src.absence_variation      # writes results/absence_variation.csv
@@ -227,6 +279,7 @@ src/sampling.py   background (absence) points, optionally bias-weighted
 src/cv.py         spatial block k-fold with an optional buffer, plus random k-fold
 src/modeling.py   random-vs-spatial CV comparison for any sklearn model
 src/roads.py      OSM roads and rivers, distance to nearest line, presence-matched absence weights
+src/climate_cover.py        mean annual rainfall (CHIRPS) and land-cover shares (WorldCover) at points
 src/grid.py       shared 30 m UTM grid, DEM warping, terrain features at points
 src/build_feature_table.py  terrain + road and river distance, uniform and road-weighted absences
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
