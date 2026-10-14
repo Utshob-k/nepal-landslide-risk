@@ -6,6 +6,7 @@ data/processed/
 *.zip
 *.gpkg
 *.pbf
+results/*.html
 
 # python
 __pycache__/

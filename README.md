@@ -29,8 +29,8 @@ data.
    boosting. Simple first.
 5. Evaluation: AUROC and PR-AUC under random CV and spatial block CV with a
    buffer. The headline is the spatial number and its gap to the random one.
-6. Map: a susceptibility surface over Nepal as an interactive web map, with the
-   training points and an uncertainty note.
+6. Map: an interactive map of terrain-model scores at the sampled locations,
+   with the catalogue points and a clear uncertainty note.
 
 ## Results
 
@@ -203,8 +203,8 @@ Spatial-CV AUROC, with the gap to random CV in brackets:
   are within 1 km and most are 5 to 50 km off. The 194 at 5 km or better are
   used. Those points are often snapped to towns, which probably makes presences
   look closer to roads than they are (44% within 100 m of a road, against 13% of
-  the country). It's the NASA legacy export; a newer COOLR version may have more
-  events and hasn't been checked.
+  the country). `src.download_catalogue` can fetch the current NASA COOLR
+  reports catalogue, but it is a different inventory and needs a complete rerun.
 - The matched absences were picked as the preferred setting after seeing the
   results. Block size, buffer and cutoff were fixed beforehand.
 - The matched absences over-correct a little: their median distance to a road is
@@ -248,11 +248,16 @@ Versions used so far (downloaded 2026-10-05, rainfall and land cover on
 2026-10-06):
 
 - Landslides: NASA Global Landslide Catalog, legacy CSV export
-  (`Global_Landslide_Catalog_Export_rows.csv`, Nepal 2007 to 2016). Licence not
-  verified yet.
+  (`Global_Landslide_Catalog_Export_rows.csv`, Nepal 2007 to 2016). NASA Earth
+  Science data are generally CC0 unless marked otherwise; cite NASA as the
+  source. The current COOLR reports service can be downloaded with
+  `python -m src.download_catalogue`; it combines GLC and later reports, so it
+  is not interchangeable with these results.
 - Elevation: Copernicus GLO-30 DEM, 45 tiles N26 to N30, E080 to E088 (AWS open
-  bucket `copernicus-dem-30m`). Licence not verified yet; attribution to
-  Copernicus is expected.
+  bucket `copernicus-dem-30m`). Free to use under the COP-DEM-GLO-30-F licence.
+  Required notice: “produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014
+  and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the
+  European Union and ESA; all rights reserved”.
 - Boundary: geoBoundaries gbOpen NPL ADM0, year 2019, CC BY 4.0.
 - Roads and rivers: Geofabrik Nepal extract (`nepal-latest.osm.pbf`, last
   modified 2026-10-03, md5 `d098ee3d64113fbc596a99fb6cf55232`). Contains data
@@ -281,7 +286,14 @@ python -m src.run_baselines                    # writes results/baselines_roads.
 python -m src.build_feature_table --draws 20   # 20 absence draws per scheme
 python -m src.absence_variation                # writes results/absence_variation.csv
 python -m src.leakage_check                    # writes results/leakage_check.csv
+python -m src.make_map                          # writes results/susceptibility_map.html
 ```
+
+For a current NASA catalogue rather than the legacy export, run
+`python -m src.download_catalogue`, then pass
+`--catalogue data/raw/COOLR_Nepal_reports.csv` to the table builder and rerun
+the analysis scripts. Do not mix its output with the published legacy-catalogue
+results.
 
 ## Layout
 
@@ -297,5 +309,7 @@ src/build_feature_table.py  builds the feature table, uniform and road-matched a
 src/run_baselines.py        baselines under random vs spatial CV, with the road ablation
 src/absence_variation.py    repeated absence draws at the headline setting
 src/leakage_check.py        does the CV show a gap when the model gets coordinates?
+src/download_catalogue.py   downloads current Nepal reports from NASA COOLR
+src/make_map.py             writes an interactive map of sampled model scores
 tests/                      synthetic-data tests, including the leakage demonstration
 ```

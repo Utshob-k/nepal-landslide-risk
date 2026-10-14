@@ -44,7 +44,7 @@ def bin_shares(dist_m: np.ndarray) -> list[float]:
     return (np.bincount(b, minlength=len(BIN_EDGES_KM) - 1) / len(b)).round(3).tolist()
 
 
-def main(n_draws: int = 1) -> None:
+def main(n_draws: int = 1, catalogue: Path | None = None) -> None:
     cutoff, ratio, seed = 5.0, 5, 0  # accuracy cutoff in km, absences per presence, rng seed
 
     if not ROADS_GPKG.exists():
@@ -65,7 +65,7 @@ def main(n_draws: int = 1) -> None:
     nepal_geom, xmin, ymax, shape, transform = make_grid()
     dem = build_dem(nepal_geom, tiles, transform, shape)
 
-    pres = load_presences(RAW / "Global_Landslide_Catalog_Export_rows.csv")
+    pres = load_presences(catalogue or RAW / "Global_Landslide_Catalog_Export_rows.csv")
     to_utm = Transformer.from_crs("EPSG:4326", CRS, always_xy=True)
     pres["x"], pres["y"] = to_utm.transform(pres["longitude"].to_numpy(), pres["latitude"].to_numpy())
     near = pres[pres["accuracy_km"] <= cutoff]
@@ -186,4 +186,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--draws", type=int, default=1,
                         help="absence draws per scheme (more than 1 writes features_roads_draws.csv)")
-    main(parser.parse_args().draws)
+    parser.add_argument("--catalogue", type=Path,
+                        help="catalogue CSV; use data/raw/COOLR_Nepal_reports.csv after downloading COOLR")
+    args = parser.parse_args()
+    main(args.draws, args.catalogue)
