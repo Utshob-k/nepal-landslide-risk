@@ -5,7 +5,7 @@ README.
 
 | Layer | Source | Where it goes |
 |---|---|---|
-| Landslides | NASA Global Landslide Catalog, legacy CSV export | `data/raw/Global_Landslide_Catalog_Export_rows.csv` |
+| Landslides | NASA Global Landslide Catalog legacy export, or current COOLR reports | `data/raw/Global_Landslide_Catalog_Export_rows.csv` or `data/raw/COOLR_Nepal_reports.csv` |
 | Elevation | Copernicus GLO-30 DEM, 45 tiles | `data/raw/dem_glo30/` |
 | Boundary | geoBoundaries NPL ADM0 | `data/raw/geoBoundaries-NPL-ADM0.geojson` |
 | Roads, rivers | Geofabrik Nepal extract (OSM) | `nepal-latest.osm.pbf` in `data/raw/` or `$NEPAL_RAW_DIR` |
@@ -13,5 +13,16 @@ README.
 | Land cover | ESA WorldCover 2021 v200, 8 tiles | `worldcover/` in `data/raw/` or `$NEPAL_RAW_DIR` |
 
 `data/processed/` (gitignored) holds the road and river GeoPackages the table
-builder extracts. `data/tables/` holds the feature tables; they aren't committed
-until the catalogue and DEM licences are checked.
+builder extracts. `data/tables/` holds the feature tables and stays gitignored
+because it is derived from the large raw downloads.
+
+To use the current NASA COOLR reports catalogue, run:
+
+```bash
+python -m src.download_catalogue
+python -m src.build_feature_table --catalogue data/raw/COOLR_Nepal_reports.csv
+```
+
+This changes the event inventory, so re-run every analysis script and label its
+results as COOLR-based; do not compare them directly with the published legacy-
+catalogue tables.
