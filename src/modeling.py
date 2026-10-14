@@ -1,8 +1,4 @@
-"""Compare random vs spatial cross-validation for the same model.
-
-The gap between the two numbers is the project's headline finding: how
-much of a naive score is just spatial autocorrelation.
-"""
+"""Score one model under random and spatial-block CV. The gap between them is the point of the project."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -41,7 +37,7 @@ def compare_cv(
     buffer: float = 0.0,
     seed: int = 0,
 ) -> dict:
-    """Score a freshly built model under random and spatial-block CV."""
+    """Score a fresh model under random and spatial-block CV."""
     random_res = _score(make_model(), X, y, random_kfold(y, k, seed))
     spatial_res = _score(make_model(), X, y, spatial_block_kfold(coords, block_size, k, buffer, seed))
     return {

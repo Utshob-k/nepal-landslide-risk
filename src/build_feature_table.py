@@ -1,14 +1,11 @@
-"""Feature table with terrain + road distance + river distance, and two absence sets.
+"""Build the feature table: terrain, road and river distance, rainfall, land cover.
 
-    NEPAL_RAW_DIR=<dir holding the .pbf, if not data/raw> .venv312/Scripts/python -m src.build_feature_table
+    NEPAL_RAW_DIR=<folder with the pbf, chirps_annual/, worldcover/> python -m src.build_feature_table [--draws N]
 
-Rows: the catalogue presences, plus two absence sets drawn with the same count:
-  uniform        every valid cell equally likely
-  road_weighted  drawn with the presences' own road-distance profile (src.roads.presence_matched_weights)
-`abs_set` says which. Run both through the models and compare: the gap is
-how much of a score is road access (reporting bias) rather than terrain.
-
-Still no rainfall, land cover or river features.
+Presences plus two sets of absences, same count each: `uniform` (every valid cell
+equally likely) and `road_weighted` (the presences' own road-distance profile).
+`abs_set` says which. --draws N writes N draws per set to features_roads_draws.csv,
+which src/absence_variation.py reads.
 """
 from __future__ import annotations
 
@@ -38,7 +35,7 @@ LC_RADIUS_KM = 2.5
 
 
 def raw_dir() -> Path:
-    """Where the big downloads live: NEPAL_RAW_DIR if set, else data/raw."""
+    """Folder with the big downloads: NEPAL_RAW_DIR if set, else data/raw."""
     return Path(os.environ.get("NEPAL_RAW_DIR", RAW))
 
 
@@ -140,7 +137,7 @@ def main(n_draws: int = 1) -> None:
             "elevation", "slope", "aspect_sin", "aspect_cos", "curvature", "road_dist_km", "river_dist_km",
             "rain_mm", *LC_COLS, "inside_nepal"]
     OUT.mkdir(parents=True, exist_ok=True)
-    if n_draws > 1:  # extra absence draws for src/absence_variation.py; the main table and its meta stay as they are
+    if n_draws > 1:  # extra draws for absence_variation, main table untouched
         table[[*cols, "draw"]].to_csv(OUT / "features_roads_draws.csv", index=False)
         print(f"wrote {len(table)} rows, {n_draws} draws per scheme -> features_roads_draws.csv")
         return

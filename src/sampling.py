@@ -1,10 +1,7 @@
-"""Choosing 'no landslide' points.
+"""Background (absence) points.
 
-The catalogue only lists landslides someone REPORTED, and reports cluster
-near roads and towns. Sampling absences uniformly across the country
-therefore teaches a model "near a road = landslide", which is reporting
-behaviour, not geology. Pass `weights` (for example an accessibility
-surface) to draw absences with the same bias as the presences.
+Reports cluster near roads, so uniform absences teach "near a road = landslide".
+Pass `weights` to draw absences with the same bias as the presences.
 """
 from __future__ import annotations
 
@@ -18,12 +15,7 @@ def sample_background(
     weights: np.ndarray | None = None,
     exclude: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Draw n distinct (row, col) cells from the valid area.
-
-    valid_mask: bool array, True where sampling is allowed (inside Nepal, not water).
-    weights:    optional non-negative array, same shape; higher = more likely.
-    exclude:    optional bool array of cells to never draw (e.g. known landslide cells).
-    """
+    """n distinct (row, col) cells inside valid_mask, skipping `exclude`, optionally weighted (>= 0)."""
     allowed = valid_mask.copy()
     if exclude is not None:
         allowed &= ~exclude

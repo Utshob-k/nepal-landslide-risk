@@ -1,25 +1,17 @@
-# Data plan
+# Data
 
-Nothing here is downloaded for you, and I have not verified download links. Find
-each source from its official page, read its licence, and record the version and
-date you used. Large files are gitignored.
+Raw downloads are gitignored. Versions, dates and licences are in the main
+README.
 
-| Layer | Candidate source | Notes |
+| Layer | Source | Where it goes |
 |---|---|---|
-| Landslide events | NASA Global Landslide Catalog | Point events with dates and locations. Filter to Nepal. Reporting bias is real (see README). Check for a newer catalogue version. |
-| Elevation | Copernicus GLO-30 DEM or SRTM | 30 m. Reproject to a metric CRS (UTM zone 44N/45N) before computing slope. |
-| Rainfall | CHIRPS | Monthly or daily rainfall, around 5 km. Use long-term mean annual and the wettest-month mean as features. |
-| Land cover | ESA WorldCover | 10 m, categorical. |
-| Rivers and roads | OpenStreetMap (a Nepal extract) | Roads are used for the accessibility weight and the bias ablation. |
-| Nepal boundary | geoBoundaries or similar | For the valid-area mask. Check the licence. |
+| Landslides | NASA Global Landslide Catalog, legacy CSV export | `data/raw/Global_Landslide_Catalog_Export_rows.csv` |
+| Elevation | Copernicus GLO-30 DEM, 45 tiles | `data/raw/dem_glo30/` |
+| Boundary | geoBoundaries NPL ADM0 | `data/raw/geoBoundaries-NPL-ADM0.geojson` |
+| Roads, rivers | Geofabrik Nepal extract (OSM) | `nepal-latest.osm.pbf` in `data/raw/` or `$NEPAL_RAW_DIR` |
+| Rainfall | CHIRPS v3.0 annual GeoTIFFs, 1991 to 2020 | `chirps_annual/` in `data/raw/` or `$NEPAL_RAW_DIR` |
+| Land cover | ESA WorldCover 2021 v200, 8 tiles | `worldcover/` in `data/raw/` or `$NEPAL_RAW_DIR` |
 
-## Layout once downloaded
-
-```
-data/raw/        untouched downloads (gitignored)
-data/processed/  clipped, reprojected, aligned rasters (gitignored)
-data/tables/     the final feature table as CSV/Parquet (small ones may be committed)
-```
-
-All rasters should end up on one shared grid and CRS before sampling.
-Record the exact versions used in the README when you report results.
+`data/processed/` (gitignored) holds the road and river GeoPackages the table
+builder extracts. `data/tables/` holds the feature tables; they aren't committed
+until the catalogue and DEM licences are checked.

@@ -21,7 +21,7 @@ def test_aspect_faces_downhill_in_compass_terms():
     rising_east = np.tile(np.arange(20) * cell, (20, 1))
     assert aspect_degrees(rising_east, cell)[10, 10] == pytest.approx(270.0)  # faces west
 
-    # Row 0 is north, so values that DEcrease with row index rise toward the north.
+    # row 0 is north, so values that fall with row index rise to the north
     rising_north = np.tile((19 - np.arange(20))[:, None] * cell, (1, 20))
     assert aspect_degrees(rising_north, cell)[10, 10] == pytest.approx(180.0)  # faces south
 
@@ -102,3 +102,19 @@ def test_random_cv_overstates_skill_on_spatially_clustered_data():
     # Measured over several seeds: random ~0.84-0.92, spatial ~0.53-0.60, gap 0.28-0.38.
     assert res["random"]["auroc_mean"] > 0.80
     assert res["auroc_gap"] > 0.15, res
+
+
+# ---- baseline model factories ----------------------------------------------
+
+def test_gradient_boosting_baseline_fits_and_ranks_a_signal():
+    from src.run_baselines import MODELS
+
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(300, 3))
+    y = (X[:, 0] + 0.5 * rng.normal(size=300) > 0).astype(int)
+    cols, make = MODELS["Gradient boosting"]
+    assert "slope" in cols
+    model = make().fit(X, y)
+    p = model.predict_proba(X)[:, 1]
+    assert p[y == 1].mean() > p[y == 0].mean()
+    assert make().get_params()["random_state"] == 0  # fixed seed, so scores are repeatable

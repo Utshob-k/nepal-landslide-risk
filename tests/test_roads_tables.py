@@ -1,7 +1,6 @@
-"""Tests for the road helpers, the table builders and the baselines runner.
+"""Tests for road helpers, table builders and the baselines runner. Synthetic data only.
 
-All synthetic: nothing here needs the files in data/. Tests that need the geo
-stack (shapely, rasterio, geopandas) skip themselves when it is not installed.
+Tests that need shapely, rasterio or geopandas skip without them.
 """
 import numpy as np
 import pytest

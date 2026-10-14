@@ -1,8 +1,6 @@
-"""Terrain derivatives from a DEM held as a 2-D numpy array.
+"""Slope, aspect and a curvature proxy from a DEM array.
 
-Row 0 is the NORTH edge (the usual raster layout), so row index increases
-southward. Cell size is in metres, so reproject a geographic DEM to a
-metric CRS first, or slopes will be wrong.
+Row 0 is the north edge. Cell size is in metres, so reproject first.
 """
 from __future__ import annotations
 
@@ -10,9 +8,9 @@ import numpy as np
 
 
 def _gradients(dem: np.ndarray, cell_size: float) -> tuple[np.ndarray, np.ndarray]:
-    """(dz/dx towards east, dz/dy towards north), both in metres per metre."""
+    """dz/dx (east) and dz/dy (north), metres per metre."""
     dz_rows, dz_cols = np.gradient(dem.astype(float), cell_size)
-    return dz_cols, -dz_rows  # moving down a row goes south, so north = -rows
+    return dz_cols, -dz_rows  # a row down is south
 
 
 def slope_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
@@ -21,10 +19,7 @@ def slope_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
 
 
 def aspect_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
-    """Compass bearing (0 = north, clockwise) the slope FACES, i.e. downhill.
-
-    Flat cells have no aspect and come back as NaN.
-    """
+    """Compass bearing the slope faces (downhill), 0 = north. NaN on flat cells."""
     dz_e, dz_n = _gradients(dem, cell_size)
     bearing = np.degrees(np.arctan2(-dz_e, -dz_n)) % 360.0
     flat = np.hypot(dz_e, dz_n) < 1e-9
@@ -32,10 +27,7 @@ def aspect_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
 
 
 def plan_curvature_proxy(dem: np.ndarray, cell_size: float) -> np.ndarray:
-    """Laplacian of the DEM: positive in hollows (convergent), negative on ridges.
-
-    A cheap stand-in for curvature, good enough as one input feature.
-    """
+    """Laplacian of the DEM: positive in hollows, negative on ridges. Cheap stand-in for curvature."""
     d = dem.astype(float)
     padded = np.pad(d, 1, mode="edge")
     lap = (
@@ -45,6 +37,6 @@ def plan_curvature_proxy(dem: np.ndarray, cell_size: float) -> np.ndarray:
 
 
 def aspect_to_sin_cos(aspect: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Aspect is circular (359 is next to 1); feed models sin/cos, not raw degrees."""
+    """Aspect is circular, so give models sin and cos."""
     rad = np.radians(aspect)
     return np.sin(rad), np.cos(rad)
