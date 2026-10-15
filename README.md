@@ -7,6 +7,9 @@ is just spatial autocorrelation, and how much is real skill?
 > **Student project. Not a hazard forecast, and not for planning, evacuation or
 > construction decisions.**
 
+Start with the [project brief](docs/PROJECT_BRIEF.md) for the question,
+headline result and the figures to show in a report or portfolio.
+
 ## Why this question
 
 Landslides cluster in space, so a random train/test split puts a near-twin of
@@ -277,7 +280,9 @@ Versions used so far (downloaded 2026-10-05, rainfall and land cover on
 # Python 3.12 recommended for the geospatial stack (rasterio etc.)
 pip install -r requirements.txt            # core: numpy, scipy, scikit-learn
 pip install -r requirements-geo.txt        # raster and vector libraries
+pip install -r requirements-dev.txt        # test and lint tools
 pytest
+ruff check src tests
 
 # Raw data goes in data/raw (see data/README.md). If the OSM .pbf, chirps_annual/
 # and worldcover/ live somewhere else, point NEPAL_RAW_DIR at that folder.

@@ -24,9 +24,30 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from shapely import contains_xy
 
-from .climate_cover import LC_COLS, landcover_shares, mean_annual_rainfall, sample_raster
-from .grid import CELL, COARSE, CRS, OUT, RAW, build_dem, load_presences, make_grid, terrain_at
-from .roads import BIN_EDGES_KM, distance_to_lines, extract_motor_roads, extract_rivers, presence_matched_weights
+from .climate_cover import (
+    LC_COLS,
+    landcover_shares,
+    mean_annual_rainfall,
+    sample_raster,
+)
+from .grid import (
+    CELL,
+    COARSE,
+    CRS,
+    OUT,
+    RAW,
+    build_dem,
+    load_presences,
+    make_grid,
+    terrain_at,
+)
+from .roads import (
+    BIN_EDGES_KM,
+    distance_to_lines,
+    extract_motor_roads,
+    extract_rivers,
+    presence_matched_weights,
+)
 from .sampling import sample_background
 
 ROADS_GPKG = RAW.parent / "processed" / "roads_motor.gpkg"
@@ -149,9 +170,9 @@ def main(n_draws: int = 1, catalogue: Path | None = None) -> None:
         "crs": CRS, "cell_m": CELL, "absence_ratio": ratio, "seed": seed, "presence_cutoff_km": cutoff,
         "road_definition": "OSM highway in motorway/trunk/primary/secondary/tertiary/unclassified/residential (+_link); "
                            "no track/path/footway/steps/service",
-        "motor_ways": int(len(lines)),
+        "motor_ways": len(lines),
         "river_definition": "OSM waterway=river only (no stream, canal, ditch or drain)",
-        "river_ways": int(len(rivers)),
+        "river_ways": len(rivers),
         "rainfall": "CHIRPS v3.0 annual totals 1991 to 2020, mean, 0.05 degree cell read at the point (mm/yr)",
         "land_cover": f"ESA WorldCover 2021 v200 class shares within {LC_RADIUS_KM} km of the point; "
                       "groups tree, shrub, grass, crop, built, bare, snow, other (water, wetland, mangrove, moss); "
@@ -171,7 +192,7 @@ def main(n_draws: int = 1, catalogue: Path | None = None) -> None:
         },
         "median_road_dist_km": {k: round(float(table[table.abs_set == k]["road_dist_km"].median()), 2)
                                 for k in ("presence", "uniform", "road_weighted")},
-        "rows_written": int(len(table)), "rows_dropped_nan_or_dupes": int(n_before - len(table)),
+        "rows_written": len(table), "rows_dropped_nan_or_dupes": int(n_before - len(table)),
         "counts_by_set": table["abs_set"].value_counts().to_dict(),
         "caveats": "weights match only the road-distance marginal; presence locations are 5 km or worse so their "
                    "road distances are noisy; weights use the presences' own distances "
