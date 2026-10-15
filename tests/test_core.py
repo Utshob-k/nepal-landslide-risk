@@ -7,7 +7,6 @@ from src.modeling import compare_cv
 from src.sampling import sample_background
 from src.terrain import aspect_degrees, slope_degrees
 
-
 # ---- terrain ---------------------------------------------------------------
 
 def test_slope_of_45_degree_plane():

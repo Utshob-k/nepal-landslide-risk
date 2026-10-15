@@ -3,9 +3,14 @@ import numpy as np
 import pytest
 
 rasterio = pytest.importorskip("rasterio")
-from rasterio.transform import from_origin  # noqa: E402
+from rasterio.transform import from_origin
 
-from src.climate_cover import LC_COLS, landcover_shares, mean_annual_rainfall, sample_raster  # noqa: E402
+from src.climate_cover import (
+    LC_COLS,
+    landcover_shares,
+    mean_annual_rainfall,
+    sample_raster,
+)
 
 
 def _write(path, arr, left, top, res, dtype):

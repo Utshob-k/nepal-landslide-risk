@@ -50,7 +50,7 @@ def load_presences(path: Path) -> pd.DataFrame:
     df = df[df["country_name"].str.strip().str.lower() == "nepal"].copy()
     df["accuracy_km"] = df["location_accuracy"].map(ACC_KM)  # 'unknown' -> NaN
     raw_dates = df["event_date"]
-    df["event_date"] = pd.to_datetime(raw_dates, errors="coerce")
+    df["event_date"] = pd.to_datetime(raw_dates, format="mixed", errors="coerce")
     numeric_dates = pd.to_numeric(raw_dates, errors="coerce")
     has_epoch_ms = numeric_dates.notna()
     df.loc[has_epoch_ms, "event_date"] = pd.to_datetime(

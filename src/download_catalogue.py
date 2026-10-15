@@ -14,7 +14,8 @@ from urllib.request import urlopen
 
 import pandas as pd
 
-from .grid import RAW
+ROOT = Path(__file__).resolve().parents[1]
+RAW = ROOT / "data" / "raw"
 
 ENDPOINT = "https://gis.earthdata.nasa.gov/portal/rest/services/Landslides/COOLR_Reports_Points/MapServer/0/query"
 NEPAL_BOUNDS = (80.0, 26.0, 89.0, 31.0)
