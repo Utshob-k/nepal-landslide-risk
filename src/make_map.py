@@ -40,8 +40,9 @@ def build_map(samples: pd.DataFrame, output: Path) -> None:
     """Write a Leaflet map with a model-score layer and catalogue presences."""
     import folium
 
-    centre = [float(samples.latitude.mean()), float(samples.longitude.mean())]
+    centre = [28.25, 84.0]
     m = folium.Map(location=centre, zoom_start=7, tiles="OpenStreetMap", control_scale=True)
+    m.fit_bounds([[26.2, 80.0], [30.5, 88.4]])
     score_layer = folium.FeatureGroup(name="Terrain-model score at sampled locations", show=True)
     pres_layer = folium.FeatureGroup(name="Catalogue presences", show=True)
     for row in samples.itertuples():
@@ -62,7 +63,8 @@ def build_map(samples: pd.DataFrame, output: Path) -> None:
                 background: white; border: 1px solid #777; border-radius: 4px; padding: 10px; font-size: 13px;">
       <b>Nepal landslide susceptibility: exploratory model map</b><br>
       Terrain-only random-forest scores at sampled locations. Purple marks reported catalogue events;
-      blue, orange and red show low, medium and high model scores for road-matched background samples.<br>
+      Blue: score &lt; 0.33; orange: 0.33–0.66; red: score &gt; 0.66. These are road-matched
+      background samples, not a continuous prediction surface.<br>
       <b>Not a hazard forecast or a tool for planning, evacuation or construction.</b>
     </div>
     """

@@ -287,6 +287,7 @@ python -m src.build_feature_table --draws 20   # 20 absence draws per scheme
 python -m src.absence_variation                # writes results/absence_variation.csv
 python -m src.leakage_check                    # writes results/leakage_check.csv
 python -m src.make_map                          # writes results/susceptibility_map.html
+python -m src.make_figures                      # writes report-ready PNG figures under results/figures/
 ```
 
 For a current NASA catalogue rather than the legacy export, run
@@ -311,5 +312,6 @@ src/absence_variation.py    repeated absence draws at the headline setting
 src/leakage_check.py        does the CV show a gap when the model gets coordinates?
 src/download_catalogue.py   downloads current Nepal reports from NASA COOLR
 src/make_map.py             writes an interactive map of sampled model scores
+src/make_figures.py         writes validation and absence-draw figures for a report
 tests/                      synthetic-data tests, including the leakage demonstration
 ```
