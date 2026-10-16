@@ -78,6 +78,16 @@ def test_too_few_blocks_is_an_error():
         list(spatial_block_kfold(coords, 10_000, k=5))
 
 
+def test_compare_cv_rejects_spatial_splits_with_no_scoreable_fold():
+    coords = np.array([[0, 0], [1, 0], [1_000, 0], [1_001, 0]])
+    y = np.array([1, 1, 0, 0])
+    with pytest.raises(ValueError, match="No fold contained both classes"):
+        compare_cv(
+            lambda: RandomForestClassifier(n_estimators=10, random_state=0),
+            coords, y, coords, block_size=1_000, k=2,
+        )
+
+
 def _smooth_field(coords, rng):
     """A spatially smooth surface with ~30 km wavelength: the thing that fools random CV."""
     out = np.zeros(len(coords))

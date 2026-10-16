@@ -39,15 +39,25 @@ def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, f
 
     Returns the array and its transform.
     """
+    if not files:
+        raise ValueError("At least one annual rainfall raster is required.")
     with rasterio.open(files[0]) as first:
         window = from_bounds(*bounds, first.transform).round_offsets().round_lengths()
         transform = first.window_transform(window)
-    total = None
+        reference = (first.crs, first.transform, first.width, first.height)
+    total = np.zeros((int(window.height), int(window.width)), dtype="float64")
+    counts = np.zeros_like(total, dtype=np.uint16)
     for f in files:
         with rasterio.open(f) as src:
-            a = src.read(1, window=window).astype("float64")
-        total = a if total is None else total + a
-    return total / len(files), transform
+            if (src.crs, src.transform, src.width, src.height) != reference:
+                raise ValueError(f"Rainfall raster {f.name} is not on the same grid as {files[0].name}.")
+            a = src.read(1, window=window, masked=True).astype("float64")
+        valid = ~np.ma.getmaskarray(a) & np.isfinite(a.data)
+        total[valid] += a.data[valid]
+        counts[valid] += 1
+    mean = np.full_like(total, np.nan)
+    np.divide(total, counts, out=mean, where=counts > 0)
+    return mean, transform
 
 
 def sample_raster(arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:

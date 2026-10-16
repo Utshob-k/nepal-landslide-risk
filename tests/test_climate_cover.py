@@ -13,9 +13,9 @@ from src.climate_cover import (
 )
 
 
-def _write(path, arr, left, top, res, dtype):
+def _write(path, arr, left, top, res, dtype, nodata=None):
     with rasterio.open(path, "w", driver="GTiff", height=arr.shape[0], width=arr.shape[1], count=1, dtype=dtype,
-                       crs="EPSG:4326", transform=from_origin(left, top, res, res)) as dst:
+                       crs="EPSG:4326", transform=from_origin(left, top, res, res), nodata=nodata) as dst:
         dst.write(arr.astype(dtype), 1)
 
 
@@ -35,6 +35,20 @@ def test_mean_rainfall_averages_the_years_and_crops(tmp_path):
     assert arr[:, 10:].mean() == pytest.approx(2600.0)  # lon 81.0 and east
     got = sample_raster(arr, transform, np.array([80.6, 81.4]), np.array([29.3, 29.3]))
     assert got == pytest.approx([2000.0, 2600.0])
+
+
+def test_mean_rainfall_ignores_nodata_cells(tmp_path):
+    first = np.full((4, 4), 1000.0, dtype="float32")
+    second = np.full((4, 4), 3000.0, dtype="float32")
+    first[0, 0] = -9999.0
+    second[0, 1] = -9999.0
+    a, b = tmp_path / "first.tif", tmp_path / "second.tif"
+    _write(a, first, 80.0, 30.0, 0.05, "float32", nodata=-9999.0)
+    _write(b, second, 80.0, 30.0, 0.05, "float32", nodata=-9999.0)
+    mean, _ = mean_annual_rainfall([a, b], (80.0, 29.8, 80.2, 30.0))
+    assert mean[0, 0] == pytest.approx(3000.0)
+    assert mean[0, 1] == pytest.approx(1000.0)
+    assert mean[1:, :].mean() == pytest.approx(2000.0)
 
 
 def test_sample_raster_gives_nan_outside_the_array(tmp_path):
