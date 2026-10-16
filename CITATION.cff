@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+title: "Nepal landslide susceptibility: how much of the score is geography?"
+type: software
+authors:
+  - name: Utshob-k
+repository-code: "https://github.com/Utshob-k/nepal-landslide-risk"
+license: MIT
+date-released: 2026-10-16
+abstract: "A reproducible student project on spatial validation and reporting bias in Nepal landslide-susceptibility modelling."

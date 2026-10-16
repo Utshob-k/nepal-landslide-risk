@@ -10,6 +10,10 @@ is just spatial autocorrelation, and how much is real skill?
 Start with the [project brief](docs/PROJECT_BRIEF.md) for the question,
 headline result and the figures to show in a report or portfolio.
 
+The [model card](docs/MODEL_CARD.md) records intended use, evaluation and limits.
+The [data card](docs/DATA_CARD.md) describes the source layers and their reuse
+constraints. GitHub can generate a citation from [`CITATION.cff`](CITATION.cff).
+
 ## Why this question
 
 Landslides cluster in space, so a random train/test split puts a near-twin of
