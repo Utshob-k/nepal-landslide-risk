@@ -19,6 +19,7 @@ RAW = ROOT / "data" / "raw"
 
 ENDPOINT = "https://gis.earthdata.nasa.gov/portal/rest/services/Landslides/COOLR_Reports_Points/MapServer/0/query"
 NEPAL_BOUNDS = (80.0, 26.0, 89.0, 31.0)
+FETCH_SIZE = 2_000
 
 
 def _legacy_rows(payload: dict) -> pd.DataFrame:
@@ -43,21 +44,31 @@ def _legacy_rows(payload: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _request(params: dict) -> dict:
+    """Call the public service and surface an ArcGIS error as a useful exception."""
+    with urlopen(f"{ENDPOINT}?{urlencode(params)}", timeout=60) as response:
+        payload = json.load(response)
+    if "error" in payload:
+        raise RuntimeError(f"NASA COOLR request failed: {payload['error']}")
+    return payload
+
+
 def download() -> pd.DataFrame:
-    """Fetch all reports inside Nepal's bounding box from NASA's public service."""
+    """Fetch every report inside Nepal's bounding box from NASA's public service."""
     params = {
         "where": "1=1",
         "geometry": ",".join(map(str, NEPAL_BOUNDS)),
         "geometryType": "esriGeometryEnvelope",
         "inSR": 4326,
         "spatialRel": "esriSpatialRelIntersects",
-        "outFields": "*",
-        "returnGeometry": "true",
-        "f": "geojson",
+        "outFields": "*", "returnGeometry": "true",
     }
-    with urlopen(f"{ENDPOINT}?{urlencode(params)}", timeout=60) as response:
-        payload = json.load(response)
-    return _legacy_rows(payload)
+    count = _request({**params, "returnCountOnly": "true", "f": "json"})["count"]
+    features = []
+    for offset in range(0, count, FETCH_SIZE):
+        page = _request({**params, "resultOffset": offset, "resultRecordCount": FETCH_SIZE, "f": "geojson"})
+        features.extend(page.get("features", []))
+    return _legacy_rows({"features": features})
 
 
 def main() -> None:

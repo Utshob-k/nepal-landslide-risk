@@ -19,6 +19,8 @@ def _score(model: BaseEstimator, X, y, splits) -> dict:
         p = model.predict_proba(X[test])[:, 1]
         aucs.append(roc_auc_score(y[test], p))
         aps.append(average_precision_score(y[test], p))
+    if not aucs:
+        raise ValueError("No fold contained both classes in training and test data; adjust the spatial split.")
     return {
         "auroc_mean": float(np.mean(aucs)),
         "auroc_std": float(np.std(aucs)),
