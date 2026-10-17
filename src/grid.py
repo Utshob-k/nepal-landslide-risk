@@ -1,8 +1,10 @@
-"""Shared 30 m grid in UTM 45N, DEM warping, and terrain at points.
+"""Build the shared terrain grid and sample terrain values at point locations.
 
-Far-west Nepal is in zone 44N. Using 45N everywhere is under 1% scale error
-there, fine for slope.
+The project uses UTM zone 45N across Nepal. Far-west Nepal is technically in
+zone 44N, but the resulting scale error stays below one percent and is small
+enough for these slope calculations.
 """
+
 from __future__ import annotations
 
 import math
@@ -24,10 +26,17 @@ from .terrain import (
 )
 
 CRS = "EPSG:32645"
-CELL = 30.0  # metres
-COARSE = 300.0  # metres, only used to draw absence locations
-HALF = 2  # patch half-width in cells for the terrain derivatives
-ACC_KM = {"exact": 0.0, "1km": 1.0, "5km": 5.0, "10km": 10.0, "25km": 25.0, "50km": 50.0}
+CELL = 30.0  # Grid resolution in metres.
+COARSE = 300.0  # Resolution used only when drawing background locations.
+HALF = 2  # Cells to include on either side of a terrain-sampling point.
+ACC_KM = {
+    "exact": 0.0,
+    "1km": 1.0,
+    "5km": 5.0,
+    "10km": 10.0,
+    "25km": 25.0,
+    "50km": 50.0,
+}
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -35,20 +44,35 @@ OUT = ROOT / "data" / "tables"
 
 
 def make_grid():
-    """Nepal polygon in UTM 45N and the shared grid (row 0 = north), padded 1 km."""
+    """Return Nepal's projected boundary and a 30 m grid with a one-kilometre margin."""
     nepal = gpd.read_file(RAW / "geoBoundaries-NPL-ADM0.geojson").to_crs(CRS)
     xmin, ymin, xmax, ymax = nepal.total_bounds
     pad = 1000.0
-    xmin, ymin = math.floor((xmin - pad) / CELL) * CELL, math.floor((ymin - pad) / CELL) * CELL
-    xmax, ymax = math.ceil((xmax + pad) / CELL) * CELL, math.ceil((ymax + pad) / CELL) * CELL
+    xmin, ymin = (
+        math.floor((xmin - pad) / CELL) * CELL,
+        math.floor((ymin - pad) / CELL) * CELL,
+    )
+    xmax, ymax = (
+        math.ceil((xmax + pad) / CELL) * CELL,
+        math.ceil((ymax + pad) / CELL) * CELL,
+    )
     shape = (int((ymax - ymin) / CELL), int((xmax - xmin) / CELL))
-    return nepal.geometry.union_all(), xmin, ymax, shape, from_origin(xmin, ymax, CELL, CELL)
+    return (
+        nepal.geometry.union_all(),
+        xmin,
+        ymax,
+        shape,
+        from_origin(xmin, ymax, CELL, CELL),
+    )
 
 
 def load_presences(path: Path) -> pd.DataFrame:
+    """Read Nepal events from either the legacy catalogue or a COOLR download."""
     df = pd.read_csv(path, encoding="utf-8-sig")
     df = df[df["country_name"].str.strip().str.lower() == "nepal"].copy()
-    df["accuracy_km"] = df["location_accuracy"].map(ACC_KM)  # 'unknown' -> NaN
+    df["accuracy_km"] = df["location_accuracy"].map(
+        ACC_KM
+    )  # Unknown accuracy remains missing.
     raw_dates = df["event_date"]
     df["event_date"] = pd.to_datetime(raw_dates, format="mixed", errors="coerce")
     numeric_dates = pd.to_numeric(raw_dates, errors="coerce")
@@ -56,11 +80,16 @@ def load_presences(path: Path) -> pd.DataFrame:
     df.loc[has_epoch_ms, "event_date"] = pd.to_datetime(
         numeric_dates[has_epoch_ms], unit="ms", errors="coerce"
     )
-    return df[["event_id", "event_date", "longitude", "latitude", "accuracy_km"]].reset_index(drop=True)
+    return df[
+        ["event_id", "event_date", "longitude", "latitude", "accuracy_km"]
+    ].reset_index(drop=True)
 
 
 def build_dem(nepal_utm, tiles: list[Path], transform, shape) -> np.ndarray:
-    """Warp every tile that touches Nepal onto the grid (NaN = no data)."""
+    """Reproject DEM tiles that overlap Nepal onto the shared grid.
+
+    Cells without elevation coverage remain ``NaN``.
+    """
     dem = np.full(shape, np.nan, dtype=np.float32)
     used = 0
     for tif in tiles:
@@ -84,8 +113,11 @@ def build_dem(nepal_utm, tiles: list[Path], transform, shape) -> np.ndarray:
 
 
 def terrain_at(dem: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> pd.DataFrame:
-    """Terrain features at (row, col), from a small patch around each cell."""
-    out = {k: np.full(len(rows), np.nan) for k in ("elevation", "slope", "aspect_sin", "aspect_cos", "curvature")}
+    """Calculate terrain features from a small neighbourhood around each cell."""
+    out = {
+        k: np.full(len(rows), np.nan)
+        for k in ("elevation", "slope", "aspect_sin", "aspect_cos", "curvature")
+    }
     h, w = dem.shape
     for i, (r, c) in enumerate(zip(rows, cols, strict=True)):
         if r < HALF or c < HALF or r >= h - HALF or c >= w - HALF:
@@ -97,7 +129,9 @@ def terrain_at(dem: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> pd.DataFr
         s, co = aspect_to_sin_cos(np.array([asp]))
         out["elevation"][i] = patch[HALF, HALF]
         out["slope"][i] = slope_degrees(patch, CELL)[HALF, HALF]
-        out["aspect_sin"][i] = 0.0 if np.isnan(asp) else s[0]  # flat cell: no aspect
+        out["aspect_sin"][i] = (
+            0.0 if np.isnan(asp) else s[0]
+        )  # Flat ground has no direction.
         out["aspect_cos"][i] = 0.0 if np.isnan(asp) else co[0]
         out["curvature"][i] = plan_curvature_proxy(patch, CELL)[HALF, HALF]
     return pd.DataFrame(out)

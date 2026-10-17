@@ -1,13 +1,13 @@
-"""Can the CV see leakage here? Give the model the coordinates and look at the gap.
+"""Check whether geographic validation detects location leakage.
 
     python -m src.leakage_check
 
-Forest on terrain, terrain + x, y, and x, y alone, under random and spatial CV at
-the headline setting. With coordinates, random CV should beat spatial CV. Then
-terrain and x, y alone at 100 and 200 km blocks: if x, y still scores there, the
-signal is regional. Also prints how clustered the presences are.
-Writes results/leakage_check.csv.
+The script compares terrain features with coordinates, and coordinates alone,
+under random and geographic validation. It also repeats terrain-only and
+coordinate-only models at larger blocks and prints nearest-neighbour distances.
+It writes ``results/leakage_check.csv``.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,12 +29,13 @@ SETS = {
 
 
 def nn_km(xy: np.ndarray) -> np.ndarray:
-    """Distance in km from each point to its nearest other point."""
+    """Return the distance from each point to its nearest different point, in km."""
     d, _ = cKDTree(xy).query(xy, k=2)
     return d[:, 1] / 1000.0
 
 
 def main() -> None:
+    """Run the leakage checks and save their summary table."""
     table = pd.read_csv(ROOT / "data" / "tables" / "features_roads.csv")
     pres = table[(table.label == 1) & (table.accuracy_km <= HEADLINE["cutoff"])]
 
@@ -45,16 +46,37 @@ def main() -> None:
         for block_km in BLOCKS_KM:
             for name, cols in SETS.items():
                 if block_km != HEADLINE["block_km"] and name == "terrain + x, y":
-                    continue  # the larger blocks only need terrain and x, y alone
-                res = [compare_cv(_forest(), d[cols].to_numpy(), y, coords, block_km * 1000.0, 5,
-                                  HEADLINE["buffer_km"] * 1000.0, seed) for seed in SEEDS]
-                rows.append({
-                    "abs_set": abs_set, "block_km": block_km, "features": name,
-                    "random_auroc": np.mean([r["random"]["auroc_mean"] for r in res]),
-                    "spatial_auroc": np.mean([r["spatial"]["auroc_mean"] for r in res]),
-                    "gap": np.mean([r["auroc_gap"] for r in res]),
-                    "spatial_folds_scored": np.mean([r["spatial"]["folds"] for r in res]),
-                })
+                    continue  # Larger-block checks compare terrain with location-only features.
+                res = [
+                    compare_cv(
+                        _forest(),
+                        d[cols].to_numpy(),
+                        y,
+                        coords,
+                        block_km * 1000.0,
+                        5,
+                        HEADLINE["buffer_km"] * 1000.0,
+                        seed,
+                    )
+                    for seed in SEEDS
+                ]
+                rows.append(
+                    {
+                        "abs_set": abs_set,
+                        "block_km": block_km,
+                        "features": name,
+                        "random_auroc": np.mean(
+                            [r["random"]["auroc_mean"] for r in res]
+                        ),
+                        "spatial_auroc": np.mean(
+                            [r["spatial"]["auroc_mean"] for r in res]
+                        ),
+                        "gap": np.mean([r["auroc_gap"] for r in res]),
+                        "spatial_folds_scored": np.mean(
+                            [r["spatial"]["folds"] for r in res]
+                        ),
+                    }
+                )
         print("done", abs_set, flush=True)
 
     df = pd.DataFrame(rows)
@@ -64,11 +86,18 @@ def main() -> None:
     print(df.round(3).to_string(index=False))
 
     print("\nnearest-neighbour distance, km (same point set, itself excluded)")
-    for label, pts in [("presences", pres), ("uniform absences", table[table.abs_set == "uniform"]),
-                       ("road_weighted absences", table[table.abs_set == "road_weighted"])]:
+    for label, pts in [
+        ("presences", pres),
+        ("uniform absences", table[table.abs_set == "uniform"]),
+        ("road_weighted absences", table[table.abs_set == "road_weighted"]),
+    ]:
         q = np.percentile(nn_km(pts[["x", "y"]].to_numpy()), [10, 50, 90])
-        print(f"  {label:24s} n={len(pts):4d}  p10 {q[0]:5.1f}  median {q[1]:5.1f}  p90 {q[2]:5.1f}")
-    print(f"  (blocks are {HEADLINE['block_km']} km, buffer {HEADLINE['buffer_km']} km)")
+        print(
+            f"  {label:24s} n={len(pts):4d}  p10 {q[0]:5.1f}  median {q[1]:5.1f}  p90 {q[2]:5.1f}"
+        )
+    print(
+        f"  (blocks are {HEADLINE['block_km']} km, buffer {HEADLINE['buffer_km']} km)"
+    )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
-"""Score one model under random and spatial-block CV. The gap between them is the point of the project."""
+"""Evaluate a classifier with random and geographic cross-validation."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -11,20 +12,23 @@ from .cv import random_kfold, spatial_block_kfold
 
 
 def _score(model: BaseEstimator, X, y, splits) -> dict:
-    aucs, aps = [], []
+    """Fit and score a fresh model for each supplied train/test split."""
+    aucs, pr_aucs = [], []
     for train, test in splits:
         if len(set(y[test])) < 2 or len(set(y[train])) < 2:
-            continue  # a fold with one class has no AUROC
+            continue  # AUROC is undefined when either side contains one class.
         model.fit(X[train], y[train])
         p = model.predict_proba(X[test])[:, 1]
         aucs.append(roc_auc_score(y[test], p))
-        aps.append(average_precision_score(y[test], p))
+        pr_aucs.append(average_precision_score(y[test], p))
     if not aucs:
-        raise ValueError("No fold contained both classes in training and test data; adjust the spatial split.")
+        raise ValueError(
+            "No fold contained both classes in training and test data; adjust the spatial split."
+        )
     return {
         "auroc_mean": float(np.mean(aucs)),
         "auroc_std": float(np.std(aucs)),
-        "pr_auc_mean": float(np.mean(aps)),
+        "pr_auc_mean": float(np.mean(pr_aucs)),
         "folds": len(aucs),
     }
 
@@ -39,9 +43,11 @@ def compare_cv(
     buffer: float = 0.0,
     seed: int = 0,
 ) -> dict:
-    """Score a fresh model under random and spatial-block CV."""
+    """Compare a model's random-fold score with its geographic-fold score."""
     random_res = _score(make_model(), X, y, random_kfold(y, k, seed))
-    spatial_res = _score(make_model(), X, y, spatial_block_kfold(coords, block_size, k, buffer, seed))
+    spatial_res = _score(
+        make_model(), X, y, spatial_block_kfold(coords, block_size, k, buffer, seed)
+    )
     return {
         "random": random_res,
         "spatial": spatial_res,

@@ -1,10 +1,11 @@
-"""Download current NASA COOLR landslide reports for Nepal.
+"""Download current NASA COOLR reports for Nepal.
 
     python -m src.download_catalogue
 
-Writes data/raw/COOLR_Nepal_reports.csv in the column layout read by
-src.build_feature_table. The downloaded file is intentionally gitignored.
+The result is written in the column layout used by ``src.build_feature_table``.
+The downloaded file stays out of version control because it is source data.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,29 +24,31 @@ FETCH_SIZE = 2_000
 
 
 def _legacy_rows(payload: dict) -> pd.DataFrame:
-    """Convert a COOLR GeoJSON response to the project catalogue schema."""
+    """Convert a COOLR GeoJSON response to the feature builder's CSV layout."""
     rows = []
     for feature in payload.get("features", []):
         props = feature.get("properties", {})
         coords = feature.get("geometry", {}).get("coordinates")
         if not coords or len(coords) < 2:
             continue
-        rows.append({
-            "event_id": props.get("event_id"),
-            "event_date": props.get("event_date"),
-            "longitude": coords[0],
-            "latitude": coords[1],
-            "location_accuracy": props.get("location_accuracy"),
-            "country_name": "Nepal",
-            "event_import_source": props.get("event_import_source"),
-            "source_name": props.get("source_name"),
-            "source_link": props.get("source_link"),
-        })
+        rows.append(
+            {
+                "event_id": props.get("event_id"),
+                "event_date": props.get("event_date"),
+                "longitude": coords[0],
+                "latitude": coords[1],
+                "location_accuracy": props.get("location_accuracy"),
+                "country_name": "Nepal",
+                "event_import_source": props.get("event_import_source"),
+                "source_name": props.get("source_name"),
+                "source_link": props.get("source_link"),
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def _request(params: dict) -> dict:
-    """Call the public service and surface an ArcGIS error as a useful exception."""
+    """Call the NASA service and turn an ArcGIS error into a useful exception."""
     with urlopen(f"{ENDPOINT}?{urlencode(params)}", timeout=60) as response:
         payload = json.load(response)
     if "error" in payload:
@@ -54,19 +57,27 @@ def _request(params: dict) -> dict:
 
 
 def download() -> pd.DataFrame:
-    """Fetch every report inside Nepal's bounding box from NASA's public service."""
+    """Download every report inside Nepal's bounding box from NASA's public service."""
     params = {
         "where": "1=1",
         "geometry": ",".join(map(str, NEPAL_BOUNDS)),
         "geometryType": "esriGeometryEnvelope",
         "inSR": 4326,
         "spatialRel": "esriSpatialRelIntersects",
-        "outFields": "*", "returnGeometry": "true",
+        "outFields": "*",
+        "returnGeometry": "true",
     }
     count = _request({**params, "returnCountOnly": "true", "f": "json"})["count"]
     features = []
     for offset in range(0, count, FETCH_SIZE):
-        page = _request({**params, "resultOffset": offset, "resultRecordCount": FETCH_SIZE, "f": "geojson"})
+        page = _request(
+            {
+                **params,
+                "resultOffset": offset,
+                "resultRecordCount": FETCH_SIZE,
+                "f": "geojson",
+            }
+        )
         features.extend(page.get("features", []))
     return _legacy_rows({"features": features})
 
@@ -74,7 +85,9 @@ def download() -> pd.DataFrame:
 def main() -> None:
     table = download()
     if table.empty:
-        raise SystemExit("COOLR returned no Nepal reports; check the service and try again.")
+        raise SystemExit(
+            "COOLR returned no Nepal reports; check the service and try again."
+        )
     RAW.mkdir(parents=True, exist_ok=True)
     target = RAW / "COOLR_Nepal_reports.csv"
     table.to_csv(target, index=False)

@@ -1,11 +1,13 @@
-"""Baselines under random and spatial-block CV on both absence sets, with the road-distance ablation.
+"""Run the baseline models with random and geographic cross-validation.
 
     python -m src.run_baselines
 
-Headline setting, fixed in advance: 50 km blocks, 10 km buffer, presences with
-accuracy <= 5 km. Every other setting is sensitivity. Reads data/tables/features_roads.csv,
-writes results/baselines_roads.csv. CPU only.
+The fixed headline setting uses 50 km blocks, a 10 km buffer, and events located
+to within five kilometres. The remaining settings are sensitivity checks. This
+script reads ``data/tables/features_roads.csv`` and writes
+``results/baselines_roads.csv``.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -28,18 +30,30 @@ HEADLINE = {"cutoff": 5.0, "block_km": 50, "buffer_km": 10}
 
 
 def _logit(max_iter: int = 100):
-    return lambda: make_pipeline(StandardScaler(), LogisticRegression(class_weight="balanced", max_iter=max_iter))
+    """Build a scaled, class-balanced logistic regression."""
+    return lambda: make_pipeline(
+        StandardScaler(), LogisticRegression(class_weight="balanced", max_iter=max_iter)
+    )
 
 
 def _forest():
-    return lambda: RandomForestClassifier(200, min_samples_leaf=5, class_weight="balanced", n_jobs=4, random_state=0)
+    """Build the fixed random-forest baseline."""
+    return lambda: RandomForestClassifier(
+        200, min_samples_leaf=5, class_weight="balanced", n_jobs=4, random_state=0
+    )
 
 
 def _boost():
-    """Shallow trees, slow learning rate. Fixed in advance, not tuned on the CV scores."""
+    """Build the fixed gradient-boosting baseline without tuning against CV scores."""
     return lambda: HistGradientBoostingClassifier(
-        max_depth=3, learning_rate=0.05, max_iter=200, min_samples_leaf=20, l2_regularization=1.0,
-        class_weight="balanced", random_state=0)
+        max_depth=3,
+        learning_rate=0.05,
+        max_iter=200,
+        min_samples_leaf=20,
+        l2_regularization=1.0,
+        class_weight="balanced",
+        random_state=0,
+    )
 
 
 MODELS = {
@@ -47,56 +61,84 @@ MODELS = {
     "Elevation only (logistic)": (["elevation"], _logit()),
     "Logistic regression": (TERRAIN, _logit(1000)),
     "Random forest": (TERRAIN, _forest()),
-    "Random forest + road distance (ablation)": (TERRAIN + ["log_road_dist"], _forest()),
+    "Random forest + road distance (ablation)": (
+        TERRAIN + ["log_road_dist"],
+        _forest(),
+    ),
     "Road distance only (logistic)": (["log_road_dist"], _logit()),
     "Random forest + river distance": (TERRAIN + ["log_river_dist"], _forest()),
     "River distance only (logistic)": (["log_river_dist"], _logit()),
-    "Random forest + road + river distance": (TERRAIN + ["log_road_dist", "log_river_dist"], _forest()),
+    "Random forest + road + river distance": (
+        TERRAIN + ["log_road_dist", "log_river_dist"],
+        _forest(),
+    ),
     "Random forest + rainfall": (TERRAIN + ["rain_mm"], _forest()),
     "Random forest + land cover": (TERRAIN + LC_COLS, _forest()),
-    "Random forest + rainfall + land cover": (TERRAIN + ["rain_mm", *LC_COLS], _forest()),
+    "Random forest + rainfall + land cover": (
+        TERRAIN + ["rain_mm", *LC_COLS],
+        _forest(),
+    ),
     "Rainfall only (logistic)": (["rain_mm"], _logit()),
     "Land cover only (forest)": (LC_COLS, _forest()),
     "Gradient boosting": (TERRAIN, _boost()),
     "Gradient boosting + land cover": (TERRAIN + LC_COLS, _boost()),
-    "Gradient boosting + rainfall + land cover": (TERRAIN + ["rain_mm", *LC_COLS], _boost()),
+    "Gradient boosting + rainfall + land cover": (
+        TERRAIN + ["rain_mm", *LC_COLS],
+        _boost(),
+    ),
 }
 
 
-def run(table: pd.DataFrame, abs_set: str, cutoff: float, block_km: int, buffer_km: int) -> list[dict]:
-    d = table[((table.label == 1) & (table.accuracy_km <= cutoff)) | (table.abs_set == abs_set)]
+def run(
+    table: pd.DataFrame, abs_set: str, cutoff: float, block_km: int, buffer_km: int
+) -> list[dict]:
+    """Score every baseline for one background scheme and validation setting."""
+    d = table[
+        ((table.label == 1) & (table.accuracy_km <= cutoff))
+        | (table.abs_set == abs_set)
+    ]
     y = d.label.to_numpy()
-    coords = d[["x", "y"]].to_numpy()  # UTM 45N metres
+    coords = d[["x", "y"]].to_numpy()  # Projected UTM coordinates in metres.
     rows = []
     for name, (cols, make) in MODELS.items():
         X = d[cols].to_numpy()
-        res = [compare_cv(make, X, y, coords, block_km * 1000.0, 5, buffer_km * 1000.0, seed) for seed in SEEDS]
+        res = [
+            compare_cv(
+                make, X, y, coords, block_km * 1000.0, 5, buffer_km * 1000.0, seed
+            )
+            for seed in SEEDS
+        ]
         spatial = [r["spatial"]["auroc_mean"] for r in res]
-        rows.append({
-            "abs_set": abs_set,
-            "model": name,
-            "cutoff_km": cutoff,
-            "block_km": block_km,
-            "buffer_km": buffer_km,
-            "n_pres": int(y.sum()),
-            "n_abs": int((1 - y).sum()),
-            "random_auroc": np.mean([r["random"]["auroc_mean"] for r in res]),
-            "spatial_auroc": np.mean(spatial),
-            "spatial_auroc_sd_over_seeds": np.std(spatial),
-            "gap": np.mean([r["auroc_gap"] for r in res]),
-            "random_prauc": np.mean([r["random"]["pr_auc_mean"] for r in res]),
-            "spatial_prauc": np.mean([r["spatial"]["pr_auc_mean"] for r in res]),
-            "spatial_folds_scored": np.mean([r["spatial"]["folds"] for r in res]),
-        })
+        rows.append(
+            {
+                "abs_set": abs_set,
+                "model": name,
+                "cutoff_km": cutoff,
+                "block_km": block_km,
+                "buffer_km": buffer_km,
+                "n_pres": int(y.sum()),
+                "n_abs": int((1 - y).sum()),
+                "random_auroc": np.mean([r["random"]["auroc_mean"] for r in res]),
+                "spatial_auroc": np.mean(spatial),
+                "spatial_auroc_sd_over_seeds": np.std(spatial),
+                "gap": np.mean([r["auroc_gap"] for r in res]),
+                "random_prauc": np.mean([r["random"]["pr_auc_mean"] for r in res]),
+                "spatial_prauc": np.mean([r["spatial"]["pr_auc_mean"] for r in res]),
+                "spatial_folds_scored": np.mean([r["spatial"]["folds"] for r in res]),
+            }
+        )
     return rows
 
 
 def main() -> None:
+    """Run the headline analysis and the sensitivity grid, then save all scores."""
     table = pd.read_csv(ROOT / "data" / "tables" / "features_roads.csv")
     table["log_road_dist"] = np.log(table["road_dist_km"] + 0.01)
     table["log_river_dist"] = np.log(table["river_dist_km"] + 0.01)
     out = []
-    grid = itertools.product(["uniform", "road_weighted"], [5.0, 10.0], [25, 50, 100], [0, 10])
+    grid = itertools.product(
+        ["uniform", "road_weighted"], [5.0, 10.0], [25, 50, 100], [0, 10]
+    )
     for abs_set, cutoff, block_km, buffer_km in grid:
         print("running", abs_set, cutoff, block_km, buffer_km, flush=True)
         out += run(table, abs_set, cutoff, block_km, buffer_km)
@@ -105,14 +147,31 @@ def main() -> None:
     df.to_csv(ROOT / "results" / "baselines_roads.csv", index=False)
 
     pd.set_option("display.width", 200)
-    h = df[(df.cutoff_km == HEADLINE["cutoff"]) & (df.block_km == HEADLINE["block_km"]) & (df.buffer_km == HEADLINE["buffer_km"])]
+    h = df[
+        (df.cutoff_km == HEADLINE["cutoff"])
+        & (df.block_km == HEADLINE["block_km"])
+        & (df.buffer_km == HEADLINE["buffer_km"])
+    ]
     print("\nHEADLINE (50 km blocks, 10 km buffer, <=5 km accuracy), mean over 5 seeds")
-    show = ["abs_set", "model", "spatial_auroc", "spatial_auroc_sd_over_seeds", "random_auroc", "gap",
-            "spatial_prauc", "n_pres", "n_abs"]
+    show = [
+        "abs_set",
+        "model",
+        "spatial_auroc",
+        "spatial_auroc_sd_over_seeds",
+        "random_auroc",
+        "gap",
+        "spatial_prauc",
+        "n_pres",
+        "n_abs",
+    ]
     print(h[show].round(3).to_string(index=False))
     print("\nSENSITIVITY: spatial AUROC / gap")
     for value in ("spatial_auroc", "gap"):
-        piv = df.pivot_table(index=["abs_set", "model"], columns=["cutoff_km", "block_km", "buffer_km"], values=value)
+        piv = df.pivot_table(
+            index=["abs_set", "model"],
+            columns=["cutoff_km", "block_km", "buffer_km"],
+            values=value,
+        )
         print(piv.round(2).to_string())
 
 

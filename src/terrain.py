@@ -1,25 +1,31 @@
-"""Slope, aspect and a curvature proxy from a DEM array.
+"""Derive local terrain features from an elevation raster.
 
-Row 0 is the north edge. Cell size is in metres, so reproject first.
+The first row represents the northern edge of the raster. Elevation values must
+be on a projected grid with cell sizes measured in metres.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
 
 def _gradients(dem: np.ndarray, cell_size: float) -> tuple[np.ndarray, np.ndarray]:
-    """dz/dx (east) and dz/dy (north), metres per metre."""
+    """Return elevation change to the east and north, in metres per metre."""
     dz_rows, dz_cols = np.gradient(dem.astype(float), cell_size)
-    return dz_cols, -dz_rows  # a row down is south
+    return dz_cols, -dz_rows  # Raster rows increase towards the south.
 
 
 def slope_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
+    """Return the downhill steepness at every raster cell, in degrees."""
     dz_e, dz_n = _gradients(dem, cell_size)
     return np.degrees(np.arctan(np.hypot(dz_e, dz_n)))
 
 
 def aspect_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
-    """Compass bearing the slope faces (downhill), 0 = north. NaN on flat cells."""
+    """Return the downhill compass bearing, with north as 0 degrees.
+
+    Flat cells have no meaningful direction, so they are returned as ``NaN``.
+    """
     dz_e, dz_n = _gradients(dem, cell_size)
     bearing = np.degrees(np.arctan2(-dz_e, -dz_n)) % 360.0
     flat = np.hypot(dz_e, dz_n) < 1e-9
@@ -27,16 +33,24 @@ def aspect_degrees(dem: np.ndarray, cell_size: float) -> np.ndarray:
 
 
 def plan_curvature_proxy(dem: np.ndarray, cell_size: float) -> np.ndarray:
-    """Laplacian of the DEM: positive in hollows, negative on ridges. Cheap stand-in for curvature."""
+    """Approximate curvature from neighbouring elevation values.
+
+    Positive values tend to occur in hollows and negative values on ridges. This
+    is a simple proxy, not a full geomorphometric curvature calculation.
+    """
     d = dem.astype(float)
     padded = np.pad(d, 1, mode="edge")
     lap = (
-        padded[:-2, 1:-1] + padded[2:, 1:-1] + padded[1:-1, :-2] + padded[1:-1, 2:] - 4 * d
+        padded[:-2, 1:-1]
+        + padded[2:, 1:-1]
+        + padded[1:-1, :-2]
+        + padded[1:-1, 2:]
+        - 4 * d
     ) / (cell_size**2)
     return lap
 
 
 def aspect_to_sin_cos(aspect: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Aspect is circular, so give models sin and cos."""
+    """Represent circular aspect values as sine and cosine features."""
     rad = np.radians(aspect)
     return np.sin(rad), np.cos(rad)

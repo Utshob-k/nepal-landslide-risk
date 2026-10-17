@@ -1,11 +1,12 @@
-"""Create an interactive, exploratory map of scores at the sampled locations.
+"""Create an interactive map of model scores at sampled locations.
 
     python -m src.make_map
 
-The map uses the terrain-only random forest and the road-matched background
-scheme. Its scores are model outputs for the sampled rows, not calibrated
-landslide probabilities or a hazard forecast.
+The map uses the terrain-only random forest and road-matched background points.
+Scores describe the sampled records in this experiment; they are neither
+calibrated landslide probabilities nor a hazard forecast.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,16 +19,21 @@ TERRAIN = ["elevation", "slope", "aspect_sin", "aspect_cos", "curvature"]
 
 
 def score_samples(table: pd.DataFrame) -> pd.DataFrame:
-    """Fit the headline terrain model and return scores for road-matched samples."""
-    d = table[((table.label == 1) & (table.accuracy_km <= 5)) | (table.abs_set == "road_weighted")].copy()
-    model = RandomForestClassifier(200, min_samples_leaf=5, class_weight="balanced", n_jobs=4, random_state=0)
-    model.fit(d[TERRAIN], d["label"])
-    d["score"] = model.predict_proba(d[TERRAIN])[:, 1]
-    return d
+    """Fit the headline terrain model and score events plus matched backgrounds."""
+    samples = table[
+        ((table.label == 1) & (table.accuracy_km <= 5))
+        | (table.abs_set == "road_weighted")
+    ].copy()
+    model = RandomForestClassifier(
+        200, min_samples_leaf=5, class_weight="balanced", n_jobs=4, random_state=0
+    )
+    model.fit(samples[TERRAIN], samples["label"])
+    samples["score"] = model.predict_proba(samples[TERRAIN])[:, 1]
+    return samples
 
 
 def _colour(score: float) -> str:
-    """Return a readable three-class colour for a model score."""
+    """Choose a simple low, medium, or high colour for a model score."""
     if score < 1 / 3:
         return "#2c7bb6"
     if score < 2 / 3:
@@ -36,24 +42,42 @@ def _colour(score: float) -> str:
 
 
 def build_map(samples: pd.DataFrame, output: Path) -> None:
-    """Write a Leaflet map with a model-score layer and catalogue presences."""
+    """Write a Leaflet map with model scores and reported catalogue events."""
     import folium
 
     centre = [28.25, 84.0]
-    m = folium.Map(location=centre, zoom_start=7, tiles="OpenStreetMap", control_scale=True)
+    m = folium.Map(
+        location=centre, zoom_start=7, tiles="OpenStreetMap", control_scale=True
+    )
     m.fit_bounds([[26.2, 80.0], [30.5, 88.4]])
-    score_layer = folium.FeatureGroup(name="Terrain-model score at sampled locations", show=True)
+    score_layer = folium.FeatureGroup(
+        name="Terrain-model score at sampled locations", show=True
+    )
     pres_layer = folium.FeatureGroup(name="Catalogue presences", show=True)
     for row in samples.itertuples():
         location = [row.latitude, row.longitude]
         if row.label:
-            folium.CircleMarker(location, radius=4, color="#1b1b1b", weight=1, fill=True,
-                                fill_color="#7b3294", fill_opacity=0.9,
-                                popup=f"Reported landslide<br>Model score: {row.score:.2f}").add_to(pres_layer)
+            folium.CircleMarker(
+                location,
+                radius=4,
+                color="#1b1b1b",
+                weight=1,
+                fill=True,
+                fill_color="#7b3294",
+                fill_opacity=0.9,
+                popup=f"Reported landslide<br>Model score: {row.score:.2f}",
+            ).add_to(pres_layer)
         else:
-            folium.CircleMarker(location, radius=3, color=_colour(row.score), weight=0, fill=True,
-                                fill_color=_colour(row.score), fill_opacity=0.55,
-                                popup=f"Background sample<br>Model score: {row.score:.2f}").add_to(score_layer)
+            folium.CircleMarker(
+                location,
+                radius=3,
+                color=_colour(row.score),
+                weight=0,
+                fill=True,
+                fill_color=_colour(row.score),
+                fill_opacity=0.55,
+                popup=f"Background sample<br>Model score: {row.score:.2f}",
+            ).add_to(score_layer)
     score_layer.add_to(m)
     pres_layer.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
@@ -73,6 +97,7 @@ def build_map(samples: pd.DataFrame, output: Path) -> None:
 
 
 def main() -> None:
+    """Create the interactive map from the local feature table."""
     table = pd.read_csv(ROOT / "data" / "tables" / "features_roads.csv")
     samples = score_samples(table)
     output = ROOT / "results" / "susceptibility_map.html"
