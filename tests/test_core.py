@@ -7,29 +7,37 @@ from src.modeling import compare_cv
 from src.sampling import sample_background
 from src.terrain import aspect_degrees, slope_degrees
 
-# ---- terrain ---------------------------------------------------------------
+# Terrain calculations
+
 
 def test_slope_of_45_degree_plane():
     cell = 30.0
-    dem = np.tile(np.arange(20) * cell, (20, 1))  # rises 30 m per 30 m cell, eastward
+    dem = np.tile(
+        np.arange(20) * cell, (20, 1)
+    )  # Elevation rises 30 metres per cell to the east.
     assert slope_degrees(dem, cell)[10, 10] == pytest.approx(45.0)
 
 
 def test_aspect_faces_downhill_in_compass_terms():
     cell = 30.0
     rising_east = np.tile(np.arange(20) * cell, (20, 1))
-    assert aspect_degrees(rising_east, cell)[10, 10] == pytest.approx(270.0)  # faces west
+    assert aspect_degrees(rising_east, cell)[10, 10] == pytest.approx(
+        270.0
+    )  # faces west
 
-    # row 0 is north, so values that fall with row index rise to the north
+    # Since row zero is north, values that fall down the array rise northward.
     rising_north = np.tile((19 - np.arange(20))[:, None] * cell, (1, 20))
-    assert aspect_degrees(rising_north, cell)[10, 10] == pytest.approx(180.0)  # faces south
+    assert aspect_degrees(rising_north, cell)[10, 10] == pytest.approx(
+        180.0
+    )  # faces south
 
 
 def test_flat_ground_has_no_aspect():
     assert np.isnan(aspect_degrees(np.zeros((5, 5)), 30.0)).all()
 
 
-# ---- sampling --------------------------------------------------------------
+# Background sampling
+
 
 def test_background_respects_mask_exclusions_and_uniqueness():
     rng = np.random.default_rng(0)
@@ -47,12 +55,13 @@ def test_background_weights_bias_the_draw():
     rng = np.random.default_rng(1)
     mask = np.ones((40, 40), bool)
     weights = np.zeros((40, 40))
-    weights[:, :10] = 1.0  # only the west quarter may be drawn
+    weights[:, :10] = 1.0  # Only the western quarter is eligible after weighting.
     _, cols = sample_background(mask, 100, rng, weights=weights)
     assert (cols < 10).all()
 
 
-# ---- cross-validation ------------------------------------------------------
+# Cross-validation
+
 
 def test_blocks_are_never_split_across_train_and_test():
     rng = np.random.default_rng(0)
@@ -84,12 +93,16 @@ def test_compare_cv_rejects_spatial_splits_with_no_scoreable_fold():
     with pytest.raises(ValueError, match="No fold contained both classes"):
         compare_cv(
             lambda: RandomForestClassifier(n_estimators=10, random_state=0),
-            coords, y, coords, block_size=1_000, k=2,
+            coords,
+            y,
+            coords,
+            block_size=1_000,
+            k=2,
         )
 
 
 def _smooth_field(coords, rng):
-    """A spatially smooth surface with ~30 km wavelength: the thing that fools random CV."""
+    """Create a smooth spatial signal that makes random validation look too good."""
     out = np.zeros(len(coords))
     for _ in range(6):
         kx, ky = rng.normal(0, 2 * np.pi / 30_000, size=2)
@@ -103,17 +116,24 @@ def test_random_cv_overstates_skill_on_spatially_clustered_data():
     coords = rng.uniform(0, 150_000, size=(1500, 2))
     field = _smooth_field(coords, rng)
     y = (field + rng.normal(0, 0.3, len(coords)) > np.median(field)).astype(int)
-    # Location is the only feature: a model can only score by memorising neighbours.
+    # Location is the only feature, so the model can only benefit from nearby neighbours.
     res = compare_cv(
         lambda: RandomForestClassifier(n_estimators=80, random_state=0, n_jobs=1),
-        coords, y, coords, block_size=30_000, k=5, buffer=5_000, seed=0,
+        coords,
+        y,
+        coords,
+        block_size=30_000,
+        k=5,
+        buffer=5_000,
+        seed=0,
     )
-    # Measured over several seeds: random ~0.84-0.92, spatial ~0.53-0.60, gap 0.28-0.38.
+    # Across several seeds, random AUROC is about 0.84–0.92 and spatial AUROC about 0.53–0.60.
     assert res["random"]["auroc_mean"] > 0.80
     assert res["auroc_gap"] > 0.15, res
 
 
-# ---- baseline model factories ----------------------------------------------
+# Baseline model factories
+
 
 def test_gradient_boosting_baseline_fits_and_ranks_a_signal():
     from src.run_baselines import MODELS
@@ -126,4 +146,6 @@ def test_gradient_boosting_baseline_fits_and_ranks_a_signal():
     model = make().fit(X, y)
     p = model.predict_proba(X)[:, 1]
     assert p[y == 1].mean() > p[y == 0].mean()
-    assert make().get_params()["random_state"] == 0  # fixed seed, so scores are repeatable
+    assert (
+        make().get_params()["random_state"] == 0
+    )  # A fixed seed keeps scores reproducible.

@@ -1,15 +1,14 @@
-"""Mean annual rainfall (CHIRPS) and land-cover shares (WorldCover) at points.
+"""Read rainfall and land-cover features at longitude/latitude locations.
 
-Rainfall: mean of the annual-total rasters, read at the cell a point falls in.
-Cells are 0.05 degrees (about 5.5 km), so nothing local.
+Rainfall is the mean of annual CHIRPS totals. Its cells are roughly 5.5 km wide,
+so it describes broad climate rather than local storms.
 
-Land cover: one 10 m class at a point is noisy when the location may be 5 km off,
-so each point gets the share of each class inside a circle (2.5 km by default).
-Only windows around points are read. Tiles must sit on one pixel grid anchored at
-(-180, 90), like WorldCover's. Value 0 is no data and is left out.
-
-Both layers are lon/lat, so points are longitude and latitude, not UTM x, y.
+Single WorldCover pixels are unreliable for events whose locations may be up to
+five kilometres off. The project therefore uses the share of each class inside a
+2.5 km circle. Only the needed windows are read. WorldCover tiles must share the
+standard pixel grid anchored at ``(-180, 90)``. Zeros represent no data.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +19,7 @@ from rasterio.windows import from_bounds
 
 M_PER_DEG = 111_320.0
 
-# WorldCover codes, grouped; the last group is rare in Nepal
+# WorldCover classes grouped into the features used by the models.
 GROUPS = {
     "lc_tree": (10,),
     "lc_shrub": (20,),
@@ -35,9 +34,11 @@ LC_COLS = list(GROUPS)
 
 
 def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, float]):
-    """Mean of annual-total rasters on one grid, cropped to `bounds` (left, bottom, right, top, degrees).
+    """Average annual rainfall over matching rasters within geographic bounds.
 
-    Returns the array and its transform.
+    ``bounds`` is ``(left, bottom, right, top)`` in degrees. Missing values are
+    excluded from each cell's average. The function returns the cropped raster
+    and its transform.
     """
     if not files:
         raise ValueError("At least one annual rainfall raster is required.")
@@ -50,7 +51,9 @@ def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, f
     for f in files:
         with rasterio.open(f) as src:
             if (src.crs, src.transform, src.width, src.height) != reference:
-                raise ValueError(f"Rainfall raster {f.name} is not on the same grid as {files[0].name}.")
+                raise ValueError(
+                    f"Rainfall raster {f.name} is not on the same grid as {files[0].name}."
+                )
             a = src.read(1, window=window, masked=True).astype("float64")
         valid = ~np.ma.getmaskarray(a) & np.isfinite(a.data)
         total[valid] += a.data[valid]
@@ -60,8 +63,10 @@ def mean_annual_rainfall(files: list[Path], bounds: tuple[float, float, float, f
     return mean, transform
 
 
-def sample_raster(arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
-    """Value of the cell each point falls in, NaN outside the array."""
+def sample_raster(
+    arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray
+) -> np.ndarray:
+    """Return each point's raster-cell value, or ``NaN`` outside the raster."""
     rows = np.floor((transform.f - np.asarray(lat)) / -transform.e).astype(int)
     cols = np.floor((np.asarray(lon) - transform.c) / transform.a).astype(int)
     ok = (rows >= 0) & (rows < arr.shape[0]) & (cols >= 0) & (cols < arr.shape[1])
@@ -73,7 +78,14 @@ def sample_raster(arr: np.ndarray, transform, lon: np.ndarray, lat: np.ndarray) 
 def landcover_shares(
     lon: np.ndarray, lat: np.ndarray, tiles: list[Path], radius_km: float = 2.5
 ) -> dict[str, np.ndarray]:
-    """Share of each class group within `radius_km` of each point, NaN where no valid pixel is covered."""
+    """Calculate land-cover shares within a radius of every point.
+
+    A point with no valid WorldCover pixels receives ``NaN`` for every class.
+    """
+    if not tiles:
+        raise ValueError("At least one WorldCover tile is required.")
+    if radius_km <= 0:
+        raise ValueError("The land-cover radius must be greater than zero.")
     srcs = [rasterio.open(t) for t in tiles]
     try:
         res = srcs[0].res[0]
@@ -81,8 +93,13 @@ def landcover_shares(
         for s in srcs:
             r0 = (90.0 - s.bounds.top) / res
             c0 = (s.bounds.left + 180.0) / res
-            if not (np.isclose(r0, round(r0), rtol=0, atol=1e-3) and np.isclose(c0, round(c0), rtol=0, atol=1e-3)):
-                raise ValueError(f"{s.name} is not on the pixel grid anchored at (-180, 90)")
+            if not (
+                np.isclose(r0, round(r0), rtol=0, atol=1e-3)
+                and np.isclose(c0, round(c0), rtol=0, atol=1e-3)
+            ):
+                raise ValueError(
+                    f"{s.name} is not on the pixel grid anchored at (-180, 90)"
+                )
             origins.append((round(r0), round(c0), s.height, s.width))
 
         lon, lat = np.asarray(lon, dtype=float), np.asarray(lat, dtype=float)
@@ -103,7 +120,12 @@ def landcover_shares(
                 win = ((a - tr0, b - tr0), (c - tc0, d - tc0))
                 canvas[a - r0 : b - r0, c - c0 : d - c0] = s.read(1, window=win)
             rr = (np.arange(r0, r1) + 0.5 - prow) * res * M_PER_DEG
-            cc = (np.arange(c0, c1) + 0.5 - pcol) * res * M_PER_DEG * np.cos(np.radians(y))
+            cc = (
+                (np.arange(c0, c1) + 0.5 - pcol)
+                * res
+                * M_PER_DEG
+                * np.cos(np.radians(y))
+            )
             inside = (rr[:, None] ** 2 + cc[None, :] ** 2) <= radius_m**2
             vals = canvas[inside & (canvas > 0)]
             if vals.size == 0:
