@@ -1,6 +1,8 @@
 # large or separately licensed data
 data/raw/
 data/processed/
+data/tables/*
+!data/tables/.gitkeep
 *.tif
 *.tiff
 *.zip
